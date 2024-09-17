@@ -1,0 +1,26 @@
+/.vscode/settings.json
+
+# DragonRuby related files
+/.dragonruby/
+/builds/
+/console-logo.png
+/ctags-emacs
+/ctags-vim
+/docs/
+/dragonruby-controller.png
+/dragonruby-httpd.exe
+/dragonruby.png
+/eula.txt
+/logs/
+/open-source-licenses.txt
+/samples/
+/tmp/
+CHANGELOG-CURR.txt
+CHANGELOG-PREV.txt
+dragonruby-bind
+dragonruby-bind.exe
+dragonruby-publish
+dragonruby-publish.exe
+dragonruby.exe
+README.txt
+!CHANGELOG-CURR.txt
