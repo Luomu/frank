@@ -3,11 +3,18 @@ PLAYER_HEALTH     = 5
 PLAYER_MOVE_SPEED = 5
 ENEMY_MOVE_SPEED  = 3
 SCORE_PER_KILL    = 10
+GRID_DIMENSION    = 32
+CELL_SIZE         = 40
+WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
 def init args
-  args.state.player  = {x: 600, y: 320, w: 80, h: 80, path: 'sprites/circle/white.png', vx: 0, vy: 0, health: PLAYER_HEALTH, cooldown: 0, score: 0}
+  args.state.player  = {x: 0, y: 0, w: 80, h: 80, path: 'sprites/circle/white.png', vx: 0, vy: 0, health: PLAYER_HEALTH, cooldown: 0, score: 0}
   args.state.enemies = []
+  args.state.world   = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
   puts "Initialized"
+
+  ploc = args.state.world.coord_to_cell_center 10,10
+  args.state.player.x, args.state.player.y = ploc.x, ploc.y
 end
 
 def tick args
@@ -33,6 +40,9 @@ def tick args
     if args.state.player.health <= 0
       args.state.current_state = State_Gameover.new args
     end
+
+    # Render world
+    args.state.world.render_grid_lines
 
     # Render characters
     args.outputs.sprites << [args.state.player, args.state.enemies]
@@ -128,5 +138,69 @@ class State_Gameover
       r: 255, g: 255, b: 49, size_enum: 2,
       text: "GEIM OVER, HIT R TO RESTART"
     }
+  end
+end
+
+class WorldGrid
+  attr_gtk
+  attr_reader :width
+  attr_reader :height
+  attr_reader :cell_size
+  attr_reader :inv_cell_size
+  attr_reader :origin
+
+  def initialize args, dimension, cell_size
+    @args = args
+    @width         = dimension
+    @height        = dimension
+    @cell_size     = cell_size
+    @inv_cell_size = 1 / cell_size
+    @origin        = { x: 0, y: 0 }
+
+    @cell_half_size     = @cell_size / 2
+  end
+
+  # Grid x,y location to array index
+  def index_to_coord index
+    x = index % @width
+    y = index/ @width
+    { x: x, y: y }
+  end
+
+  # Grid array index to x,y coordinate
+  def coord_to_index x, y
+    x + @width * y
+  end
+
+  # World coordinate (float) to cell x,y
+  def world_to_coord world_x, world_y
+    local_x  = world_x - @origin.x
+    local_y  = world_y - @origin.y
+    i = (local_x * @inv_cell_size).floor
+    j = (local_y * @inv_cell_size).floor
+    { x: i, y: j }
+  end
+
+  # Cell center location in world coordinates
+  def coord_to_cell_center x,y
+    local_x = x.clamp(0, @width - 1)
+    local_y = y.clamp(0, @height - 1)
+    { x: @origin.x + local_x * @cell_size + @cell_half_size, y: @origin.y + local_y * @cell_size + @cell_half_size }
+  end
+
+  # Debug draw functions
+  def render_grid_lines
+    outputs.lines << (0..@width).map { |x| vertical_line(x) }
+    outputs.lines << (0..@height).map { |y| horizontal_line(y) }
+  end
+
+  def horizontal_line y
+    line = { x: 0, y: y, w: @width, h: 0 }
+    line.transform_values { |v| v * @cell_size }
+  end
+  
+  def vertical_line x
+    line = { x: x, y: 0, w: 0, h: @height }
+    line.transform_values { |v| v * @cell_size }
   end
 end
