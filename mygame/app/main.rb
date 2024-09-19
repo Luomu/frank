@@ -9,6 +9,18 @@ WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
 PLAYER_START = { x: 10, y: 10 }
 
+North = 0
+East  = 1
+South = 2
+West  = 3
+
+DirectionLookup = [
+  {x: 0, y: 1},  # N
+  {x: 1, y: 0},  # E
+  {x: 0, y: -1}, # S
+  {x: -1, y: 0}  # W
+]
+
 def init args
   args.state.player  = { x: 0, y: 0, w: 80, h: 80, path: 'sprites/circle/white.png',
     anchor_x: 0.5, anchor_y: 0.5,
@@ -62,7 +74,7 @@ class State_Gameplay
     args.state.world.goal_location = plr_loc
     args.state.world.tick
 
-    #spawn_enemies args
+    spawn_enemies args
     collide_enemies args
     move_enemies args
     move_player args
@@ -93,7 +105,7 @@ class State_Gameplay
     if rand < (100+args.state.player[:score])/(10000 + args.state.player[:score]) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
       args.state.enemies << {
-          x: 600 + Math.cos(theta) * 800, y: 320 + Math.sin(theta) * 800,
+          x: 600 + Math.cos(theta) * 200, y: 320 + Math.sin(theta) * 200,
           w: 80, h: 80,
           path: 'sprites/circle/white.png',
           r: (256 * rand).floor, g: (256 * rand).floor, b: (256 * rand).floor,
@@ -121,13 +133,21 @@ class State_Gameplay
   # Direction towards player.
   def move_enemies args
     args.state.enemies.each do |enemy|
+      # Steer towards player
       # Get the angle from the enemy to the player
-      theta   = Math.atan2(enemy.y - args.state.player.y, enemy.x - args.state.player.x)
+      #theta   = Math.atan2(enemy.y - args.state.player.y, enemy.x - args.state.player.x)
       # Convert the angle to a vector pointing at the player
-      dx, dy  = theta.to_degrees.vector ENEMY_MOVE_SPEED
+      #dx, dy  = theta.to_degrees.vector ENEMY_MOVE_SPEED
       # Move the enemy towards thr player
-      enemy.x -= dx
-      enemy.y -= dy
+      #enemy.x -= dx
+      #enemy.y -= dy
+
+      # Read direction from the vector field
+      current_loc = state.world.world_to_coord enemy.x, enemy.y
+      current_idx = state.world.coord_to_index current_loc.x, current_loc.y
+      best_dir    = DirectionLookup[state.world.vector_field[current_idx]]
+      enemy.x += best_dir.x * ENEMY_MOVE_SPEED
+      enemy.y += best_dir.y * ENEMY_MOVE_SPEED
     end
   end
   
@@ -184,6 +204,7 @@ class WorldGrid
   attr_reader :origin
 
   attr_accessor :goal_location
+  attr_reader   :vector_field
 
   def initialize args, dimension, cell_size
     @args = args
@@ -197,7 +218,12 @@ class WorldGrid
 
     @goal_location = { x:0, y:0 }
 
+    # Field storing the distance from the player's location
     @distance_field = Array.new(@width * @height, -1)
+    # Field indicating which direction to go from the current cell to
+    # Reach the player location fastest. Does not store the actual vector but
+    # An index into a lookup table. (Could be packed into the same array as distance field)
+    @vector_field = Array.new(@width * @height, 0)
   end
 
   # Grid x,y location to array index
@@ -247,10 +273,25 @@ class WorldGrid
   def render_distance_field
     return unless @distance_field
 
+    #@distance_field.each_with_index do |distance,idx|
+    #  coord  = index_to_coord idx
+    #  center = coord_to_cell_center coord.x, coord.y
+    #  outputs.labels << { x: center.x, y: center.y, r: 255, g: 255, b: 255, size_enum: 0, text: distance, alignment_enum: 1 }
+    #end
+
     @distance_field.each_with_index do |distance,idx|
+      direction = @vector_field[idx]
+      dir_vec   = DirectionLookup[direction]
       coord  = index_to_coord idx
       center = coord_to_cell_center coord.x, coord.y
-      outputs.labels << { x: center.x, y: center.y, r: 255, g: 255, b: 255, size_enum: 0, text: distance, alignment_enum: 1 }
+      outputs.labels << { x: center.x, y: center.y, r: 255, g: 255, b: 255, size_enum: -4, text: "#{distance}, #{direction}", alignment_enum: 1 }
+      outputs.lines << {
+        x: center.x,
+        y: center.y,
+        w: dir_vec.x * 10,
+        h: dir_vec.y * 10,
+        r: 128
+      }
     end
   end
 
@@ -266,9 +307,18 @@ class WorldGrid
     neighbors
   end
 
+  def get_distance_value x, y
+    if x > -1 && y > -1 && x < @width && y < @height
+      return @distance_field[coord_to_index(x, y)]
+    else
+      return 1000
+    end
+  end
+
   def tick
     @distance_field.fill(-1)
 
+    # Calculate distances
     start_loc = @goal_location
     start_idx = coord_to_index start_loc.x, start_loc.y
     frontier  = [start_loc]
@@ -283,6 +333,40 @@ class WorldGrid
           @distance_field[neighbor_idx] = 1 + @distance_field[current_idx]
         end
       end
+    end
+
+    # Calculate the optimal direction from each cell
+    # Look around the neighboring cells and check which has the lowest distance
+    @distance_field.each_with_index do |distance, idx|
+      current_loc    = index_to_coord idx
+      best_direction = North
+      best_distance  = 1000
+
+      new_distance = get_distance_value(current_loc.x, current_loc.y + 1)
+      if new_distance < best_distance
+        best_direction = North
+        best_distance  = new_distance
+      end
+
+      new_distance = get_distance_value(current_loc.x + 1, current_loc.y)
+      if new_distance < best_distance
+        best_direction = East
+        best_distance  = new_distance
+      end
+
+      new_distance = get_distance_value(current_loc.x, current_loc.y - 1)
+      if new_distance < best_distance
+        best_direction = South
+        best_distance  = new_distance
+      end
+
+      new_distance = get_distance_value(current_loc.x - 1, current_loc.y)
+      if new_distance < best_distance
+        best_direction = West
+        best_distance  = new_distance
+      end
+
+      @vector_field[idx] = best_direction
     end
   end
 end
