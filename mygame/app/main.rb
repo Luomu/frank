@@ -9,6 +9,8 @@ WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
 ENEMY_RADIUS         = 100
 ENEMY_COLLIDE_RADIUS = (ENEMY_RADIUS + ENEMY_RADIUS) / 2.0
+ENEMY_SPRITE_HEIGHT  = 42
+ENEMY_SPRITE_WIDTH   = 32
 
 PLAYER_START = { x: 10, y: 10 }
 
@@ -140,17 +142,37 @@ class State_Gameplay
     args.outputs.debug.watch args.state.world.goal_location
   end
 
+  def make_enemy xpos,ypos
+    {
+      x: xpos,
+      y: ypos,
+      w: ENEMY_SPRITE_WIDTH,
+      h: ENEMY_SPRITE_HEIGHT,
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      path: 'sprites/villager.png',
+      tile_x: 0,
+      tile_y: 0,
+      tile_w: ENEMY_SPRITE_WIDTH,
+      tile_h: ENEMY_SPRITE_HEIGHT,
+      flip_horizontally: 0,
+    }
+  end
+
   def spawn_enemies args
     # Spawn enemies more frequently as the player's score increases.
     if rand < (100+args.state.player[:score])/(10000 + args.state.player[:score]) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
-      args.state.enemies << {
+      args.state.enemies << make_enemy(640 + Math.cos(theta) * 300, 360 + Math.sin(theta) * 300)
+=begin
+      {
           x: 640 + Math.cos(theta) * 300, y: 360 + Math.sin(theta) * 300,
           w: 80, h: 80,
           path: 'sprites/circle/white.png',
           r: (256 * rand).floor, g: (256 * rand).floor, b: (256 * rand).floor,
           anchor_x: 0.5, anchor_y: 0.5
       }
+=end
     end
   end
   
@@ -205,6 +227,7 @@ class State_Gameplay
       # Read direction from the vector field
       current_loc = state.world.world_to_coord enemy.x, enemy.y
       current_idx = state.world.coord_to_index current_loc.x, current_loc.y
+      enemy.tile_x = (current_idx % 2 == 0) ? 0 : ENEMY_SPRITE_WIDTH
       move_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
 
       move_delta = { x: move_dir.x * ENEMY_MOVE_SPEED, y: move_dir.y * ENEMY_MOVE_SPEED}
@@ -240,8 +263,6 @@ class State_Gameplay
     if args.inputs.directional_angle
       args.state.player.x += args.inputs.directional_angle.vector_x * PLAYER_MOVE_SPEED
       args.state.player.y += args.inputs.directional_angle.vector_y * PLAYER_MOVE_SPEED
-      #args.state.player.x  = args.state.player.x.clamp(0, args.state.world.w - args.state.player.size)
-      #args.state.player.y  = args.state.player.y.clamp(0, args.state.world.h - args.state.player.size)
     end
   end
 
@@ -461,10 +482,10 @@ class WorldGrid
       [0, -1, South],
       [-1, 0, West],
 
-      [1, 1, NorthEast],
-      [1, -1, SouthEast],
+      [1, 1,   NorthEast],
+      [1, -1,  SouthEast],
       [-1, -1, SouthWest],
-      [-1, 1, NorthWest],
+      [-1, 1,  NorthWest],
     ]
 
     # Calculate the optimal direction from each cell
