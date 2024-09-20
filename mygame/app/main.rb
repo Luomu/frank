@@ -29,6 +29,25 @@ DirectionLookup = [
   {x: -1, y: 1},  # NW
 ]
 
+# Pre-normalized vectors (1 length) for movement
+# magnitude  = ((@x**2)+(@y**2))**0.5
+# normalized = {x/magnitude, y/magnitude}
+DirectionLookupNormalized = [
+  {x: 0, y: 1},                                     # N
+  {x: 0.7071067811865474, y: 0.7071067811865474},   # NE
+  {x: 1, y: 0},                                     # E
+  {x: 0.7071067811865474, y: -0.7071067811865474},  # SE
+  {x: 0, y: -1},                                    # S
+  {x: -0.7071067811865474, y: -0.7071067811865474}, # SW
+  {x: -1, y: 0},                                    # W
+  {x: -0.7071067811865474, y: 0.7071067811865474},  # NW
+]
+
+def normalized vec
+  mag = ((vec.x**2)+(vec.y**2))**0.5
+  {x: vec.x / mag, y: vec.y / mag}
+end
+
 def init args
   args.state.player  = { x: 0, y: 0, w: 80, h: 80, path: 'sprites/circle/white.png',
     anchor_x: 0.5, anchor_y: 0.5,
@@ -153,7 +172,7 @@ class State_Gameplay
       # Read direction from the vector field
       current_loc = state.world.world_to_coord enemy.x, enemy.y
       current_idx = state.world.coord_to_index current_loc.x, current_loc.y
-      best_dir    = DirectionLookup[state.world.vector_field[current_idx]]
+      best_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
       enemy.x += best_dir.x * ENEMY_MOVE_SPEED
       enemy.y += best_dir.y * ENEMY_MOVE_SPEED
     end
@@ -289,7 +308,7 @@ class WorldGrid
 
     @distance_field.each_with_index do |distance,idx|
       direction = @vector_field[idx]
-      dir_vec   = DirectionLookup[direction]
+      dir_vec   = DirectionLookupNormalized[direction]
       coord  = index_to_coord idx
       center = coord_to_cell_center coord.x, coord.y
       outputs.labels << { x: center.x, y: center.y, r: 255, g: 255, b: 255, size_enum: -4, text: "#{distance}, #{direction}", alignment_enum: 1 }
