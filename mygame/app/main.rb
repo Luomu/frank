@@ -9,16 +9,24 @@ WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
 PLAYER_START = { x: 10, y: 10 }
 
-North = 0
-East  = 1
-South = 2
-West  = 3
+North     = 0
+NorthEast = 1
+East      = 2
+SouthEast = 3
+South     = 4
+SouthWest = 5
+West      = 6
+NorthWest = 7
 
 DirectionLookup = [
-  {x: 0, y: 1},  # N
-  {x: 1, y: 0},  # E
-  {x: 0, y: -1}, # S
-  {x: -1, y: 0}  # W
+  {x: 0, y: 1},   # N
+  {x: 1, y: 1},   # NE
+  {x: 1, y: 0},   # E
+  {x: 1, y: -1},  # SE
+  {x: 0, y: -1},  # S
+  {x: -1, y: -1}, # SW
+  {x: -1, y: 0},  # W
+  {x: -1, y: 1},  # NW
 ]
 
 def init args
@@ -316,6 +324,8 @@ class WorldGrid
   end
 
   def tick
+    # Todo: Don't calculate this, if the position is the same
+    # Split the calculation over multiple frames to reduce the load
     @distance_field.fill(-1)
 
     # Calculate distances
@@ -335,35 +345,34 @@ class WorldGrid
       end
     end
 
+    # Data for looping through neighbors in the following calculation
+    # xoffset, yoffset and which direction they correspond to
+    DirCheckData = [
+      [0, 1, North],
+      [1, 0, East],
+      [0, -1, South],
+      [-1, 0, West],
+
+      [1, 1, NorthEast],
+      [1, -1, SouthEast],
+      [-1, -1, SouthWest],
+      [-1, 1, NorthWest],
+    ]
+
     # Calculate the optimal direction from each cell
     # Look around the neighboring cells and check which has the lowest distance
+    # We check all 8 neighbors here to allow diagonal movement
     @distance_field.each_with_index do |distance, idx|
       current_loc    = index_to_coord idx
       best_direction = North
       best_distance  = 1000
 
-      new_distance = get_distance_value(current_loc.x, current_loc.y + 1)
-      if new_distance < best_distance
-        best_direction = North
-        best_distance  = new_distance
-      end
-
-      new_distance = get_distance_value(current_loc.x + 1, current_loc.y)
-      if new_distance < best_distance
-        best_direction = East
-        best_distance  = new_distance
-      end
-
-      new_distance = get_distance_value(current_loc.x, current_loc.y - 1)
-      if new_distance < best_distance
-        best_direction = South
-        best_distance  = new_distance
-      end
-
-      new_distance = get_distance_value(current_loc.x - 1, current_loc.y)
-      if new_distance < best_distance
-        best_direction = West
-        best_distance  = new_distance
+      DirCheckData.each do |direction|
+        new_distance = get_distance_value(current_loc.x + direction[0], current_loc.y +  + direction[1])
+        if new_distance < best_distance
+          best_direction = direction[2]
+          best_distance  = new_distance
+        end
       end
 
       @vector_field[idx] = best_direction
