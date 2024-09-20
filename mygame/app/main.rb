@@ -129,7 +129,7 @@ class State_Gameplay
 
     # Render world
     args.state.world.render_grid_lines
-    #args.state.world.render_distance_field
+    args.state.world.render_distance_field
 
     # Render characters
     args.outputs.sprites << [args.state.player, args.state.enemies]
@@ -309,6 +309,33 @@ class WorldGrid
     # Reach the player location fastest. Does not store the actual vector but
     # An index into a lookup table. (Could be packed into the same array as distance field)
     @vector_field = Array.new(@width * @height, 0)
+
+    # Walls
+    @cost_field = Array.new(@width * @height, 0)
+
+    set_impassable 10,13
+    set_impassable 11,13
+    set_impassable 12,13
+
+    set_impassable 20,5
+    set_impassable 20,6
+    set_impassable 20,7
+    set_impassable 21,5
+    set_impassable 21,6
+    set_impassable 21,7
+
+    set_impassable 2,6
+    set_impassable 3,6
+    set_impassable 4,6
+    set_impassable 5,6
+  end
+
+  def set_impassable x,y
+    @cost_field[coord_to_index(x,y)] = 1
+  end
+
+  def is_impassable? x,y
+    @cost_field[coord_to_index(x,y)] > 0
   end
 
   # Grid x,y location to array index
@@ -369,14 +396,16 @@ class WorldGrid
       dir_vec   = DirectionLookupNormalized[direction]
       coord  = index_to_coord idx
       center = coord_to_cell_center coord.x, coord.y
-      outputs.labels << { x: center.x, y: center.y, r: 255, g: 255, b: 255, size_enum: -4, text: "#{distance}, #{direction}", alignment_enum: 1 }
-      outputs.lines << {
-        x: center.x,
-        y: center.y,
-        w: dir_vec.x * 10,
-        h: dir_vec.y * 10,
-        r: 128
-      }
+      if !is_impassable?(coord.x, coord.y)
+        outputs.labels << { x: center.x, y: center.y, r: 255, g: 255, b: 255, size_enum: -4, text: "#{distance}, #{direction}", alignment_enum: 1 }
+        outputs.lines << {
+          x: center.x,
+          y: center.y,
+          w: dir_vec.x * 10,
+          h: dir_vec.y * 10,
+          r: 128
+        }
+      end
     end
   end
 
@@ -394,7 +423,9 @@ class WorldGrid
 
   def get_distance_value x, y
     if x > -1 && y > -1 && x < @width && y < @height
-      return @distance_field[coord_to_index(x, y)]
+      idx = coord_to_index(x, y)
+      return 1000 if @distance_field[idx] == -1
+      return @distance_field[idx]
     else
       return 1000
     end
@@ -414,7 +445,7 @@ class WorldGrid
       current = frontier.shift
       get_neighbors(current).each do |neighbor|
         neighbor_idx = coord_to_index neighbor.x, neighbor.y
-        if @distance_field[neighbor_idx] == -1 # not visited
+        if @distance_field[neighbor_idx] == -1 && @cost_field[neighbor_idx] == 0 # not visited
           frontier << neighbor
           current_idx  = coord_to_index current.x, current.y
           @distance_field[neighbor_idx] = 1 + @distance_field[current_idx]
@@ -442,10 +473,10 @@ class WorldGrid
     @distance_field.each_with_index do |distance, idx|
       current_loc    = index_to_coord idx
       best_direction = North
-      best_distance  = 1000
+      best_distance  = 10000
 
       DirCheckData.each do |direction|
-        new_distance = get_distance_value(current_loc.x + direction[0], current_loc.y +  + direction[1])
+        new_distance = get_distance_value(current_loc.x + direction[0], current_loc.y + direction[1])
         if new_distance < best_distance
           best_direction = direction[2]
           best_distance  = new_distance
