@@ -7,6 +7,9 @@ GRID_DIMENSION    = 32
 CELL_SIZE         = 40
 WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
+ENEMY_RADIUS         = 100
+ENEMY_COLLIDE_RADIUS = (ENEMY_RADIUS + ENEMY_RADIUS) / 2.0
+
 PLAYER_START = { x: 10, y: 10 }
 
 North     = 0
@@ -43,12 +46,20 @@ DirectionLookupNormalized = [
   {x: -0.7071067811865474, y: 0.7071067811865474},  # NW
 ]
 
-def normalized vec
-  mag = ((vec.x**2)+(vec.y**2))**0.5
-  {x: vec.x / mag, y: vec.y / mag}
+# Some vector functions not present in Geometry::
+def vec2_subtract a, b
+  {x: a.x - b.x, y: a.y - b.y}
 end
 
-def init args
+def vec2_cross a,b
+  a.x * b.y - a.y * b.x
+end
+
+def vec2_angle_between a,b
+  Math.atan2(vec2_cross(a,b), Geometry::vec2_dot_product(a,b))
+end
+
+def init_game args
   args.state.player  = { x: 0, y: 0, w: 80, h: 80, path: 'sprites/circle/white.png',
     anchor_x: 0.5, anchor_y: 0.5,
     vx: 0, vy: 0, health: PLAYER_HEALTH, cooldown: 0, score: 0
@@ -56,19 +67,21 @@ def init args
   args.state.enemies = []
   args.state.world   = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
   args.state.world.goal_location = PLAYER_START
-  puts "Initialized"
 
   # Position player
   ploc = args.state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
   args.state.player.x, args.state.player.y = ploc.x, ploc.y
 
+  # Game logic runner
   args.state.current_state = State_Gameplay.new args
+
+  puts "Initialized"
 end
 
 def tick args
   # Initialize/reinitialize
   if !args.state.initialized
-    init args
+    init_game args
     args.state.initialized = true
   end
 
@@ -103,7 +116,7 @@ class State_Gameplay
 
     spawn_enemies args
     collide_enemies args
-    move_enemies args
+    move_enemies_no_overlap
     move_player args
     # player attack
 
@@ -116,7 +129,7 @@ class State_Gameplay
 
     # Render world
     args.state.world.render_grid_lines
-    args.state.world.render_distance_field
+    #args.state.world.render_distance_field
 
     # Render characters
     args.outputs.sprites << [args.state.player, args.state.enemies]
@@ -132,7 +145,7 @@ class State_Gameplay
     if rand < (100+args.state.player[:score])/(10000 + args.state.player[:score]) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
       args.state.enemies << {
-          x: 600 + Math.cos(theta) * 200, y: 320 + Math.sin(theta) * 200,
+          x: 640 + Math.cos(theta) * 300, y: 360 + Math.sin(theta) * 300,
           w: 80, h: 80,
           path: 'sprites/circle/white.png',
           r: (256 * rand).floor, g: (256 * rand).floor, b: (256 * rand).floor,
@@ -175,6 +188,51 @@ class State_Gameplay
       best_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
       enemy.x += best_dir.x * ENEMY_MOVE_SPEED
       enemy.y += best_dir.y * ENEMY_MOVE_SPEED
+    end
+  end
+
+  def check_enemy_overlap a, b
+    pos_diff = {
+      x: b.x - a.x,
+      y: b.y - a.y
+    }
+    mag = Geometry::vec2_magnitude pos_diff
+    mag <= ENEMY_COLLIDE_RADIUS
+  end
+
+  def move_enemies_no_overlap
+    state.enemies.each do |enemy|
+      # Read direction from the vector field
+      current_loc = state.world.world_to_coord enemy.x, enemy.y
+      current_idx = state.world.coord_to_index current_loc.x, current_loc.y
+      move_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
+
+      move_delta = { x: move_dir.x * ENEMY_MOVE_SPEED, y: move_dir.y * ENEMY_MOVE_SPEED}
+
+      # Don't move, if we would overlap others
+      move_blocked = false
+      state.enemies.each do |other_enemy|
+        next if enemy == other_enemy
+        break if move_blocked
+
+        # https://www.youtube.com/watch?v=UAlYELsxYfs
+        # The enemies overlap, check if we are moving towards or away
+        dir_to_other = vec2_subtract({x:other_enemy.x, y:other_enemy.y}, {x:enemy.x, y:enemy.y})
+        mag          = Geometry::vec2_magnitude dir_to_other
+        # not overlapping (todo merge with above check)
+        if mag > 1 && mag < ENEMY_COLLIDE_RADIUS
+          normal_to_other = Geometry::vec2_normalize dir_to_other
+          angle_between   = (vec2_angle_between normal_to_other, move_dir).abs
+          if angle_between < Math::PI / 4.0
+            move_blocked = true
+          end
+        end
+      end
+
+      if !move_blocked
+        enemy.x += move_dir.x * ENEMY_MOVE_SPEED
+        enemy.y += move_dir.y * ENEMY_MOVE_SPEED
+      end
     end
   end
   
