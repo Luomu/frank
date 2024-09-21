@@ -1,13 +1,13 @@
 # Constants
 PLAYER_HEALTH     = 5
 PLAYER_MOVE_SPEED = 5
-ENEMY_MOVE_SPEED  = 3
+ENEMY_MOVE_SPEED  = 1.5
 SCORE_PER_KILL    = 10
 GRID_DIMENSION    = 32
 CELL_SIZE         = 40
 WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
-ENEMY_RADIUS         = 100
+ENEMY_RADIUS         = 50
 ENEMY_COLLIDE_RADIUS = (ENEMY_RADIUS + ENEMY_RADIUS) / 2.0
 ENEMY_SPRITE_HEIGHT  = 42
 ENEMY_SPRITE_WIDTH   = 32
@@ -142,7 +142,10 @@ class State_Gameplay
     args.outputs.debug.watch args.state.world.goal_location
   end
 
+  @@villager_style = 0
   def make_enemy xpos,ypos
+    @@villager_style = (@@villager_style + 42) % 84 
+    puts(@@villager_style)
     {
       x: xpos,
       y: ypos,
@@ -152,7 +155,7 @@ class State_Gameplay
       anchor_y: 0.5,
       path: 'sprites/villager.png',
       tile_x: 0,
-      tile_y: 0,
+      tile_y: @@villager_style,
       tile_w: ENEMY_SPRITE_WIDTH,
       tile_h: ENEMY_SPRITE_HEIGHT,
       flip_horizontally: 0,
@@ -453,6 +456,8 @@ class WorldGrid
   end
 
   def tick
+    return if @prev_location == @goal_location
+    @prev_location == @goal_location
     # Todo: Don't calculate this, if the position is the same
     # Split the calculation over multiple frames to reduce the load
     @distance_field.fill(-1)
