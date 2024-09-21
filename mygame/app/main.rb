@@ -120,8 +120,10 @@ def make_player
 end
 
 $villager_style = 0
+$villager_flip  = 0
 def make_enemy xpos,ypos
-  $villager_style = ($villager_style + 42) % 84 
+  $villager_style = ($villager_style + 42) % 84
+  $villager_flip += 1
   {
     x: xpos,
     y: ypos,
@@ -134,7 +136,7 @@ def make_enemy xpos,ypos
     tile_y: $villager_style,
     tile_w: ENEMY_SPRITE_WIDTH,
     tile_h: ENEMY_SPRITE_HEIGHT,
-    flip_horizontally: 0,
+    flip_horizontally: ($villager_flip % 3) == 0,
   }
 end
 
@@ -162,7 +164,7 @@ class State_Gameplay
       args.state.current_state = State_Gameover.new args
     end
 
-    args.outputs.background_color = [20,40,40]
+    args.outputs.background_color = [10,20,20]
 
     # Render world
     args.state.world.render_grid_lines
@@ -445,13 +447,16 @@ class WorldGrid
       coord  = index_to_coord idx
       center = coord_to_cell_center coord.x, coord.y
       if !is_impassable?(coord.x, coord.y)
-        outputs.labels << { x: center.x, y: center.y, r: 255, g: 255, b: 255, size_enum: -4, text: "#{distance}, #{direction}", alignment_enum: 1 }
+        outputs.labels << { x: center.x, y: center.y,
+          r: 128, g: 128, b: 128,
+          size_enum: -4, text: "#{distance}, #{direction}", alignment_enum: 1
+        }
         outputs.lines << {
           x: center.x,
           y: center.y,
           w: dir_vec.x * 10,
           h: dir_vec.y * 10,
-          r: 128
+          r: 120
         }
       end
     end
