@@ -11,6 +11,8 @@ ENEMY_RADIUS         = 50
 ENEMY_COLLIDE_RADIUS = (ENEMY_RADIUS + ENEMY_RADIUS) / 2.0
 ENEMY_SPRITE_HEIGHT  = 42
 ENEMY_SPRITE_WIDTH   = 32
+PLAYER_SPRITE_WIDTH  = 32
+PLAYER_SPRITE_HEIGHT = 48
 
 PLAYER_START = { x: 10, y: 10 }
 
@@ -62,10 +64,7 @@ def vec2_angle_between a,b
 end
 
 def init_game args
-  args.state.player  = { x: 0, y: 0, w: 80, h: 80, path: 'sprites/circle/white.png',
-    anchor_x: 0.5, anchor_y: 0.5,
-    vx: 0, vy: 0, health: PLAYER_HEALTH, cooldown: 0, score: 0
-  }
+  args.state.player  = make_player
   args.state.enemies = []
   args.state.world   = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
   args.state.world.goal_location = PLAYER_START
@@ -103,6 +102,42 @@ def tick args
   args.outputs.labels << { x: 10, y: 70.from_top, r: 255, g: 255, b: 255, size_enum: -2, text: "FPS: #{args.gtk.current_framerate.to_sf}" }
 end
 
+def make_player
+  {
+    x: 0,
+    y: 0,
+    w: PLAYER_SPRITE_WIDTH,
+    h: PLAYER_SPRITE_HEIGHT,
+    path: 'sprites/frank.png',
+    tile_x: 0,
+    tile_y: 0,
+    tile_w: PLAYER_SPRITE_WIDTH,
+    tile_h: PLAYER_SPRITE_HEIGHT,
+    anchor_x: 0.5, anchor_y: 0.5,
+    health: PLAYER_HEALTH,
+    score:  0
+  }
+end
+
+$villager_style = 0
+def make_enemy xpos,ypos
+  $villager_style = ($villager_style + 42) % 84 
+  {
+    x: xpos,
+    y: ypos,
+    w: ENEMY_SPRITE_WIDTH,
+    h: ENEMY_SPRITE_HEIGHT,
+    anchor_x: 0.5,
+    anchor_y: 0.5,
+    path: 'sprites/villager.png',
+    tile_x: 0,
+    tile_y: $villager_style,
+    tile_w: ENEMY_SPRITE_WIDTH,
+    tile_h: ENEMY_SPRITE_HEIGHT,
+    flip_horizontally: 0,
+  }
+end
+
 # Running the game logic
 class State_Gameplay
   attr_gtk
@@ -119,7 +154,7 @@ class State_Gameplay
     spawn_enemies args
     collide_enemies args
     move_enemies_no_overlap
-    move_player args
+    tick_player args
     # player attack
 
     # Game over check
@@ -142,40 +177,11 @@ class State_Gameplay
     args.outputs.debug.watch args.state.world.goal_location
   end
 
-  @@villager_style = 0
-  def make_enemy xpos,ypos
-    @@villager_style = (@@villager_style + 42) % 84 
-    puts(@@villager_style)
-    {
-      x: xpos,
-      y: ypos,
-      w: ENEMY_SPRITE_WIDTH,
-      h: ENEMY_SPRITE_HEIGHT,
-      anchor_x: 0.5,
-      anchor_y: 0.5,
-      path: 'sprites/villager.png',
-      tile_x: 0,
-      tile_y: @@villager_style,
-      tile_w: ENEMY_SPRITE_WIDTH,
-      tile_h: ENEMY_SPRITE_HEIGHT,
-      flip_horizontally: 0,
-    }
-  end
-
   def spawn_enemies args
     # Spawn enemies more frequently as the player's score increases.
     if rand < (100+args.state.player[:score])/(10000 + args.state.player[:score]) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
       args.state.enemies << make_enemy(640 + Math.cos(theta) * 300, 360 + Math.sin(theta) * 300)
-=begin
-      {
-          x: 640 + Math.cos(theta) * 300, y: 360 + Math.sin(theta) * 300,
-          w: 80, h: 80,
-          path: 'sprites/circle/white.png',
-          r: (256 * rand).floor, g: (256 * rand).floor, b: (256 * rand).floor,
-          anchor_x: 0.5, anchor_y: 0.5
-      }
-=end
     end
   end
   
@@ -262,11 +268,29 @@ class State_Gameplay
     end
   end
   
-  def move_player args
+  def move_player
     if args.inputs.directional_angle
       args.state.player.x += args.inputs.directional_angle.vector_x * PLAYER_MOVE_SPEED
       args.state.player.y += args.inputs.directional_angle.vector_y * PLAYER_MOVE_SPEED
+      #enemy.tile_x = (current_idx % 2 == 0) ? 0 : ENEMY_SPRITE_WIDTH
+      state.player.anim_time  ||= 0
+      state.player.anim_frame ||= 0
+      state.player.anim_time += 3
+      if state.player.anim_time > 20
+        state.player.anim_time  = 0
+        state.player.anim_frame = (state.player.anim_frame + 1) % 2
+        state.player.tile_x = (state.player.anim_frame) == 0 ? 0 : PLAYER_SPRITE_WIDTH
+      end
+
+      if args.inputs.directional_angle.vector_x.abs == 1
+        args.outputs.debug.watch args.inputs.directional_angle.vector_x
+        state.player.flip_horizontally = args.inputs.directional_angle.vector_x < 0
+      end
     end
+  end
+
+  def tick_player args
+    move_player
   end
 
   def render_hud args
