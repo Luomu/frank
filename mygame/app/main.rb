@@ -13,15 +13,17 @@
 
 # Constants
 PLAYER_HEALTH     = 5
-PLAYER_MOVE_SPEED = 5
+PLAYER_MOVE_SPEED = 4.5
 PLAYER_ATTACK_COOLDOWN = 65 # default, in ticks
-ENEMY_MOVE_SPEED  = 1.5
+ENEMY_MOVE_SPEED  = 1.2
 SCORE_PER_KILL    = 10
+XP_PICKUP_VALUE   = 10
+
 GRID_DIMENSION    = 32
 CELL_SIZE         = 40
 WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
-ENEMY_RADIUS         = 50
+ENEMY_RADIUS         = 25
 ENEMY_COLLIDE_RADIUS = (ENEMY_RADIUS + ENEMY_RADIUS) / 2.0
 ENEMY_SPRITE_HEIGHT  = 42
 ENEMY_SPRITE_WIDTH   = 32
@@ -128,8 +130,50 @@ def tick args
   args.outputs.labels << { x: 100.from_right, y: 20.from_top, r: 255, g: 255, b: 255, size_enum: -2, text: "FPS: #{args.gtk.current_framerate.to_sf}" }
 end
 
+# Healing or level up pickup
 class Pickup
+  attr_sprite
+  attr_reader :activated
 
+  def initialize x, y, tile_xoffs
+    @x = x
+    @y = y
+    @w = 32
+    @h = 32
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @tile_w = 32
+    @tile_h = 32
+    @path   = 'sprites/pickups.png'
+    @tile_x = tile_xoffs
+
+    @activated = false
+  end
+
+  def pick_up state
+    @activated = true
+  end
+end
+
+class ExperiencePickup < Pickup
+  def initialize x, y
+    super x,y,0
+  end
+
+  def pick_up state
+    super state
+    state.xp += XP_PICKUP_VALUE
+  end
+end
+
+class HealthPickup < Pickup
+  def initialize
+    super x,y,32
+  end
+
+  def pick_up state
+    super state
+  end
 end
 
 module EntityFactory
@@ -196,14 +240,20 @@ module EntityFactory
       life:  20,
     }
   end
+
+  def self.make_xp_pickup xpos, ypos
+    ExperiencePickup.new(xpos, ypos)
+  end
 end # module EntityFactory
 
 # Running the game logic
 class State_Gameplay
   attr_gtk
+  attr_accessor :pickups
 
   def initialize args
     self.args = args
+    args.state.pickups = []
   end
 
   def tick
@@ -216,7 +266,8 @@ class State_Gameplay
     spawn_enemies args
     collide_enemies
     move_enemies_no_overlap
-    tick_player args
+    tick_player
+    tick_pickups
 
     # Game over check
     if args.state.player.health <= 0 && Cheats::GODMODE == false
@@ -230,7 +281,7 @@ class State_Gameplay
     #state.world.render_distance_field
 
     # Render characters
-    args.outputs.sprites << [args.state.player, args.state.enemies]
+    args.outputs.sprites << [state.pickups, state.enemies, state.player]
     args.outputs.sprites << state.player_attacks
 
     debug_render_collision_rects
@@ -238,15 +289,16 @@ class State_Gameplay
     render_hud
 
     # Debug watches
-    args.outputs.debug.watch args.state.world.goal_location
-    args.outputs.debug.watch args.state.enemies.length.to_i
+    #outputs.debug.watch args.state.world.goal_location
+    outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
+    outputs.debug << "HP #{state.player.health.to_i}"
   end
 
   def spawn_enemies args
     # Spawn enemies more frequently as the player's score increases.
     if rand < (100+args.state.player[:score])/(10000 + args.state.player[:score]) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
-      args.state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 300, 360 + Math.sin(theta) * 300)
+      args.state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 600, 360 + Math.sin(theta) * 340)
     end
   end
   
@@ -273,6 +325,7 @@ class State_Gameplay
 =end
       if enemy.health <= 0
         give_score SCORE_PER_KILL
+        state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
         true
       end
     end
@@ -362,13 +415,12 @@ class State_Gameplay
       end
 
       if args.inputs.directional_angle.vector_x.abs == 1
-        args.outputs.debug.watch args.inputs.directional_angle.vector_x
         state.player.flip_horizontally = args.inputs.directional_angle.vector_x < 0
       end
     end
   end
 
-  def tick_player args
+  def tick_player
     move_player
 
     # Attack
@@ -394,20 +446,40 @@ class State_Gameplay
     state.player_attacks.reject! {|attack| attack.life <= 0 }
   end
 
+  def tick_pickups
+    collisions = Geometry.find_all_intersect_rect args.state.player, args.state.pickups
+    collisions.each do |pickup|
+      pickup.pick_up args.state
+    end
+    # Collide pickups
+    # Animate pickups upon collect
+    # Reject removed pickups
+    state.pickups.reject! {|pickup| pickup.activated }
+  end
+
   def render_hud
+    # Time survived
     minutes = (args.state.seconds_survived / 60) % 60
     seconds = args.state.seconds_survived % 60
-
-    args.outputs.labels << { x: 100.from_right, y: 90.from_top,
+    args.outputs.labels << { x: 640, y: 90.from_top,
       r: 255, g: 255, b: 255, size_enum: -2,
+      alignment_enum: 1,
       text: "#{minutes.round.to_s.rjust(2, '0')}:#{seconds.round.to_s.rjust(2, '0')}"
     }
 
+    # Health bar under the player
+    #args.outputs.labels << { x: 10, y: 90.from_top,
+    #  r: 255, g: 255, b: 255, size_enum: -2,
+    #  text: "Health: #{args.state.player.health}"
+    #}
+
+    # Experience bar
     args.outputs.labels << { x: 10, y: 90.from_top,
       r: 255, g: 255, b: 255, size_enum: -2,
-      text: "Health: #{args.state.player.health}"
+      text: "XP: #{args.state.xp}"
     }
   
+    # Score (gold)
     args.outputs.labels << { x: 100, y: 90.from_top,
       r: 255, g: 255, b: 255, size_enum: -2,
       text: "Score: #{args.state.player.score}"
@@ -422,7 +494,8 @@ class State_Gameplay
     state.rect_1 = state.player.rect
     outputs.borders << state.player.rect.merge(g: 255)
     outputs.borders << state.enemies
-    outputs.borders << state.player.attacks
+    outputs.borders << state.player_attacks
+    outputs.borders << state.pickups
   end
 end
 
