@@ -12,7 +12,7 @@
 # - Perf: refactor sprites to use classes
 
 # Constants
-PLAYER_HEALTH     = 5
+PLAYER_HEALTH     = 16
 PLAYER_MOVE_SPEED = 4.5
 PLAYER_ATTACK_COOLDOWN = 65 # default, in ticks
 ENEMY_MOVE_SPEED  = 1.2
@@ -189,9 +189,10 @@ module EntityFactory
       tile_w: PLAYER_SPRITE_WIDTH,
       tile_h: PLAYER_SPRITE_HEIGHT,
       anchor_x: 0.5, anchor_y: 0.5,
-      health: PLAYER_HEALTH,
-      attack_cooldown_max: PLAYER_ATTACK_COOLDOWN,
+      health:     PLAYER_HEALTH,
+      health_max: PLAYER_HEALTH,
       attack_cooldown:     PLAYER_ATTACK_COOLDOWN,
+      attack_cooldown_max: PLAYER_ATTACK_COOLDOWN,
       score:  0
     }
   end
@@ -292,6 +293,7 @@ class State_Gameplay
     #outputs.debug.watch args.state.world.goal_location
     outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
     outputs.debug << "HP #{state.player.health.to_i}"
+    outputs.debug << "Pickups #{state.pickups.length.to_i}"
   end
 
   def spawn_enemies args
@@ -472,6 +474,11 @@ class State_Gameplay
     #  r: 255, g: 255, b: 255, size_enum: -2,
     #  text: "Health: #{args.state.player.health}"
     #}
+    hp_bar_pos_x = state.player.x + 15
+    hp_bar_pos_y = state.player.y - 30
+    hp_bar_fill  = (state.player.health / state.player.health_max).clamp(0,1)
+    args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: 30, h: 5, anchor_x: 1.0, anchor_y: 1 }.solid!
+    args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: hp_bar_fill * 30, h: 5, r: 255, anchor_x: 1.0, anchor_y: 1 }.solid!
 
     # Experience bar
     args.outputs.labels << { x: 10, y: 90.from_top,
@@ -487,7 +494,7 @@ class State_Gameplay
   end
   
   def give_score amount
-    $args.state.player.score += amount
+    state.player.score += amount
   end
 
   def debug_render_collision_rects
