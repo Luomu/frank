@@ -32,7 +32,7 @@ PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
 module Cheats
-  GODMODE = true
+  GODMODE = false
 end
 
 PLAYER_START = { x: 10, y: 10 }
@@ -257,6 +257,7 @@ class State_Gameplay
     state.pickups = []
     state.xp            = 0
     state.next_xp_level = 100
+    state.score = 0
   end
 
   def tick
@@ -292,7 +293,6 @@ class State_Gameplay
     render_hud
 
     # Debug watches
-    #outputs.debug.watch args.state.world.goal_location
     outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
     outputs.debug << "HP #{state.player.health.to_i}"
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
@@ -300,7 +300,7 @@ class State_Gameplay
 
   def spawn_enemies args
     # Spawn enemies more frequently as the player's score increases.
-    if rand < (100+args.state.player[:score])/(10000 + args.state.player[:score]) || Kernel.tick_count.zero?
+    if rand < (100+args.state.score)/(10000 + args.state.score) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
       args.state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 600, 360 + Math.sin(theta) * 340)
     end
@@ -481,10 +481,10 @@ class State_Gameplay
     # Experience bar at the top of the screen
     xp        = state.xp
     xp_to_lvl = state.next_xp_level
-    xp_bar_pos_x = 100
+    xp_bar_pos_x = 180
     xp_bar_pos_y = 30.from_top
     xp_bar_fill  = (xp/xp_to_lvl).clamp(0,1)
-    xp_bar_w     = 1080
+    xp_bar_w     = 920
     args.outputs.primitives << { x: xp_bar_pos_x-1, y: xp_bar_pos_y+1, w: xp_bar_w+2, h: 22, anchor_x: 0.0, anchor_y: 1 }.solid!
     args.outputs.primitives << { x: xp_bar_pos_x, y: xp_bar_pos_y, w: xp_bar_w * xp_bar_fill, h: 20, b: 120, anchor_x: 0.0, anchor_y: 1 }.solid!
     args.outputs.labels << { x: 640, y: 34.from_top,
@@ -496,12 +496,12 @@ class State_Gameplay
     # Score (gold)
     args.outputs.labels << { x: 100, y: 90.from_top,
       r: 255, g: 255, b: 255, size_enum: -2,
-      text: "Score: #{args.state.player.score}"
+      text: "Score: #{args.state.score}"
     }
   end
   
   def give_score amount
-    state.player.score += amount
+    state.score += amount
   end
 
   def debug_render_collision_rects
@@ -524,9 +524,17 @@ class State_Gameover
   def tick
     args.outputs.background_color = [40,10,70]
 
-    outputs.labels << { x: 140, y: 130.from_top,
-      r: 255, g: 255, b: 49, size_enum: 2,
-      text: "GEIM OVER, HIT R TO RESTART"
+    minutes = ((args.state.seconds_survived / 60) % 60).to_i
+    seconds = (args.state.seconds_survived % 60).to_i
+    outputs.labels << { x: 640, y: 200.from_top,
+      r: 255, g: 255, b: 49, size_enum: 3,
+      alignment_enum: 1,
+      text: "GAME OVER, YOU SURVIVED #{minutes}m #{seconds}s"
+    }
+    outputs.labels << { x: 640, y: 240.from_top,
+      r: 255, g: 255, b: 49, size_enum: 1,
+      alignment_enum: 1,
+      text: "HIT R TO RESTART"
     }
   end
 end
