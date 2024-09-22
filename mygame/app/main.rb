@@ -17,7 +17,7 @@ PLAYER_MOVE_SPEED = 4.5
 PLAYER_ATTACK_COOLDOWN = 65 # default, in ticks
 ENEMY_MOVE_SPEED  = 1.2
 SCORE_PER_KILL    = 10
-XP_PICKUP_VALUE   = 10
+XP_PICKUP_VALUE   = 1
 
 GRID_DIMENSION    = 32
 CELL_SIZE         = 40
@@ -254,7 +254,9 @@ class State_Gameplay
 
   def initialize args
     self.args = args
-    args.state.pickups = []
+    state.pickups = []
+    state.xp            = 0
+    state.next_xp_level = 100
   end
 
   def tick
@@ -463,27 +465,32 @@ class State_Gameplay
     # Time survived
     minutes = (args.state.seconds_survived / 60) % 60
     seconds = args.state.seconds_survived % 60
-    args.outputs.labels << { x: 640, y: 90.from_top,
-      r: 255, g: 255, b: 255, size_enum: -2,
+    args.outputs.labels << { x: 640, y: 60.from_top,
+      r: 255, g: 255, b: 255, size_enum: 2,
       alignment_enum: 1,
       text: "#{minutes.round.to_s.rjust(2, '0')}:#{seconds.round.to_s.rjust(2, '0')}"
     }
 
     # Health bar under the player
-    #args.outputs.labels << { x: 10, y: 90.from_top,
-    #  r: 255, g: 255, b: 255, size_enum: -2,
-    #  text: "Health: #{args.state.player.health}"
-    #}
     hp_bar_pos_x = state.player.x + 15
     hp_bar_pos_y = state.player.y - 30
     hp_bar_fill  = (state.player.health / state.player.health_max).clamp(0,1)
     args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: 30, h: 5, anchor_x: 1.0, anchor_y: 1 }.solid!
     args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: hp_bar_fill * 30, h: 5, r: 255, anchor_x: 1.0, anchor_y: 1 }.solid!
 
-    # Experience bar
-    args.outputs.labels << { x: 10, y: 90.from_top,
-      r: 255, g: 255, b: 255, size_enum: -2,
-      text: "XP: #{args.state.xp}"
+    # Experience bar at the top of the screen
+    xp        = state.xp
+    xp_to_lvl = state.next_xp_level
+    xp_bar_pos_x = 100
+    xp_bar_pos_y = 30.from_top
+    xp_bar_fill  = (xp/xp_to_lvl).clamp(0,1)
+    xp_bar_w     = 1080
+    args.outputs.primitives << { x: xp_bar_pos_x-1, y: xp_bar_pos_y+1, w: xp_bar_w+2, h: 22, anchor_x: 0.0, anchor_y: 1 }.solid!
+    args.outputs.primitives << { x: xp_bar_pos_x, y: xp_bar_pos_y, w: xp_bar_w * xp_bar_fill, h: 20, b: 120, anchor_x: 0.0, anchor_y: 1 }.solid!
+    args.outputs.labels << { x: 640, y: 34.from_top,
+      r: 255, g: 255, b: 255, size_enum: -4,
+      alignment_enum: 1,
+      text: "LVL 1 (#{xp}/#{xp_to_lvl})"
     }
   
     # Score (gold)
