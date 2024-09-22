@@ -1,6 +1,20 @@
+# Avoid or fight villagers
+# Collect bolts to grow stronger
+# Survive as long as you can
+#
+# TODO:
+# - Player attacks
+# - Collect bolts to level up and attack faster & stronger
+# - Collect electricity to heal
+# - More optimized collision between enemies
+# - Scrolling
+# - Obstacles
+# - Perf: refactor sprites to use classes
+
 # Constants
 PLAYER_HEALTH     = 5
 PLAYER_MOVE_SPEED = 5
+PLAYER_ATTACK_COOLDOWN = 65 # default, in ticks
 ENEMY_MOVE_SPEED  = 1.5
 SCORE_PER_KILL    = 10
 GRID_DIMENSION    = 32
@@ -13,6 +27,11 @@ ENEMY_SPRITE_HEIGHT  = 42
 ENEMY_SPRITE_WIDTH   = 32
 PLAYER_SPRITE_WIDTH  = 32
 PLAYER_SPRITE_HEIGHT = 48
+PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
+
+module Cheats
+  GODMODE = true
+end
 
 PLAYER_START = { x: 10, y: 10 }
 
@@ -64,10 +83,17 @@ def vec2_angle_between a,b
 end
 
 def init_game args
-  args.state.player  = make_player
-  args.state.enemies = []
-  args.state.world   = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
+  # todo these should be in the gamestate class...
+  args.state.player         = EntityFactory::make_player
+  args.state.enemies        = []
+  args.state.player_attacks = []
+  args.state.world          = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
   args.state.world.goal_location = PLAYER_START
+
+  args.state.start_time = Kernel.tick_count
+  args.state.seconds_survived = 0
+  args.state.xp = 0
+  args.state.player_level = 1
 
   # Position player
   ploc = args.state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
@@ -99,46 +125,78 @@ def tick args
   end
 
   # Debug stats
-  args.outputs.labels << { x: 10, y: 70.from_top, r: 255, g: 255, b: 255, size_enum: -2, text: "FPS: #{args.gtk.current_framerate.to_sf}" }
+  args.outputs.labels << { x: 100.from_right, y: 20.from_top, r: 255, g: 255, b: 255, size_enum: -2, text: "FPS: #{args.gtk.current_framerate.to_sf}" }
 end
 
-def make_player
-  {
-    x: 0,
-    y: 0,
-    w: PLAYER_SPRITE_WIDTH,
-    h: PLAYER_SPRITE_HEIGHT,
-    path: 'sprites/frank.png',
-    tile_x: 0,
-    tile_y: 0,
-    tile_w: PLAYER_SPRITE_WIDTH,
-    tile_h: PLAYER_SPRITE_HEIGHT,
-    anchor_x: 0.5, anchor_y: 0.5,
-    health: PLAYER_HEALTH,
-    score:  0
-  }
+class Pickup
+
 end
 
-$villager_style = 0
-$villager_flip  = 0
-def make_enemy xpos,ypos
-  $villager_style = ($villager_style + 42) % 84
-  $villager_flip += 1
-  {
-    x: xpos,
-    y: ypos,
-    w: ENEMY_SPRITE_WIDTH,
-    h: ENEMY_SPRITE_HEIGHT,
-    anchor_x: 0.5,
-    anchor_y: 0.5,
-    path: 'sprites/villager.png',
-    tile_x: 0,
-    tile_y: $villager_style,
-    tile_w: ENEMY_SPRITE_WIDTH,
-    tile_h: ENEMY_SPRITE_HEIGHT,
-    flip_horizontally: ($villager_flip % 3) == 0,
-  }
-end
+module EntityFactory
+  def self.make_player
+    {
+      x: 0,
+      y: 0,
+      w: PLAYER_SPRITE_WIDTH,
+      h: PLAYER_SPRITE_HEIGHT,
+      path: 'sprites/frank.png',
+      tile_x: 0,
+      tile_y: 0,
+      tile_w: PLAYER_SPRITE_WIDTH,
+      tile_h: PLAYER_SPRITE_HEIGHT,
+      anchor_x: 0.5, anchor_y: 0.5,
+      health: PLAYER_HEALTH,
+      attack_cooldown_max: PLAYER_ATTACK_COOLDOWN,
+      attack_cooldown:     PLAYER_ATTACK_COOLDOWN,
+      score:  0
+    }
+  end
+
+  $villager_style = 0
+  $villager_flip  = 0
+  def self.make_enemy xpos,ypos
+    $villager_style = ($villager_style + 42) % 84
+    $villager_flip += 1
+    {
+      x: xpos,
+      y: ypos,
+      w: ENEMY_SPRITE_WIDTH,
+      h: ENEMY_SPRITE_HEIGHT,
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      path: 'sprites/villager.png',
+      tile_x: 0,
+      tile_y: $villager_style,
+      tile_w: ENEMY_SPRITE_WIDTH,
+      tile_h: ENEMY_SPRITE_HEIGHT,
+      flip_horizontally: ($villager_flip % 3) == 0,
+      health: 1
+    }
+  end
+
+  # Punch wave (attached to the player)
+  def self.make_player_attack xoffs, yoffs, flip
+    #xoffs = flip ? -25 : 25
+    {
+      x: 0,
+      y: 0,
+      xoffs: flip ? -xoffs : xoffs,
+      yoffs: yoffs,
+      anchor_x: flip ? 0.8 : 0.2,
+      anchor_y: 0.5,
+      flip_horizontally: flip,
+      path: 'sprites/player-attacks.png',
+      r: 255,
+      g: 255,
+      b: 255,
+      a: 255,
+      w: 30,
+      h: 50,
+      scale: 1.0,
+      life:  20,
+    }
+  end
+end # module EntityFactory
 
 # Running the game logic
 class State_Gameplay
@@ -149,54 +207,73 @@ class State_Gameplay
   end
 
   def tick
+    args.state.seconds_survived = args.state.start_time.elapsed_time.idiv(60)
+
     plr_loc = state.world.world_to_coord state.player.x, state.player.y
     args.state.world.goal_location = plr_loc
     args.state.world.tick
 
     spawn_enemies args
-    collide_enemies args
+    collide_enemies
     move_enemies_no_overlap
     tick_player args
-    # player attack
 
     # Game over check
-    if args.state.player.health <= 0
+    if args.state.player.health <= 0 && Cheats::GODMODE == false
       args.state.current_state = State_Gameover.new args
     end
 
-    args.outputs.background_color = [10,20,20]
+    args.outputs.background_color = [40,45,35]
 
     # Render world
-    args.state.world.render_grid_lines
-    args.state.world.render_distance_field
+    #state.world.render_grid_lines
+    #state.world.render_distance_field
 
     # Render characters
     args.outputs.sprites << [args.state.player, args.state.enemies]
+    args.outputs.sprites << state.player_attacks
 
-    render_hud args
+    debug_render_collision_rects
+
+    render_hud
 
     # Debug watches
     args.outputs.debug.watch args.state.world.goal_location
+    args.outputs.debug.watch args.state.enemies.length.to_i
   end
 
   def spawn_enemies args
     # Spawn enemies more frequently as the player's score increases.
     if rand < (100+args.state.player[:score])/(10000 + args.state.player[:score]) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
-      args.state.enemies << make_enemy(640 + Math.cos(theta) * 300, 360 + Math.sin(theta) * 300)
+      args.state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 300, 360 + Math.sin(theta) * 300)
     end
   end
   
   # Collide enemies with player (they die in 1 hit and damage player)
-  def collide_enemies args
+  def collide_enemies
+    # Collide against player
+    collisions = state.enemies.find_all { |b| b.intersect_rect? state.player }
+    collisions.each do |enemy|
+      enemy.health -= 1
+      state.player.health -= 1
+    end
+
+    # Remove deads (put into a dead list while their death anim plays)
     args.state.enemies.reject! do |enemy|
-      # Check if enemy and player are within 60 pixels of each other
-      if 3600 > (enemy.x - args.state.player.x) ** 2 + (enemy.y - args.state.player.y) ** 2
+=begin
+      # Check if enemy and player are within X pixels of each other
+      if enemy.health > 0 && PLAYER_COLLIDE_RADIUS_SQ > (enemy.x - args.state.player.x) ** 2 + (enemy.y - args.state.player.y) ** 2
         # Enemy is touching player. Kill enemy, and reduce player HP by 1.
-        args.state.player[:health] -= 1
-        give_score SCORE_PER_KILL
+        args.state.player.health -= 1
+        enemy.health -= 1
       else
         # Player bullet/attack collisions
+      end
+=end
+      if enemy.health <= 0
+        give_score SCORE_PER_KILL
+        true
       end
     end
   end
@@ -293,9 +370,39 @@ class State_Gameplay
 
   def tick_player args
     move_player
+
+    # Attack
+    state.player.attack_cooldown -= 1
+    if state.player.attack_cooldown <= 0
+      state.player.attack_cooldown = state.player.attack_cooldown_max
+      state.player_attacks << EntityFactory::make_player_attack(25, 0, state.player.flip_horizontally)
+    end
+
+    state.player_attacks.each do |attack|
+      attack.x = attack.xoffs + state.player.x
+      attack.y = attack.yoffs + state.player.y
+      attack.life -= 1
+      attack.w += 0.15
+      attack.h += 0.2
+    end
+
+    Geometry.each_intersect_rect(state.player_attacks, state.enemies) do |attack, enemy|
+      attack.g = attack.b = 0
+      enemy.health -= 1
+    end
+
+    state.player_attacks.reject! {|attack| attack.life <= 0 }
   end
 
-  def render_hud args
+  def render_hud
+    minutes = (args.state.seconds_survived / 60) % 60
+    seconds = args.state.seconds_survived % 60
+
+    args.outputs.labels << { x: 100.from_right, y: 90.from_top,
+      r: 255, g: 255, b: 255, size_enum: -2,
+      text: "#{minutes.round.to_s.rjust(2, '0')}:#{seconds.round.to_s.rjust(2, '0')}"
+    }
+
     args.outputs.labels << { x: 10, y: 90.from_top,
       r: 255, g: 255, b: 255, size_enum: -2,
       text: "Health: #{args.state.player.health}"
@@ -309,6 +416,13 @@ class State_Gameplay
   
   def give_score amount
     $args.state.player.score += amount
+  end
+
+  def debug_render_collision_rects
+    state.rect_1 = state.player.rect
+    outputs.borders << state.player.rect.merge(g: 255)
+    outputs.borders << state.enemies
+    outputs.borders << state.player.attacks
   end
 end
 
