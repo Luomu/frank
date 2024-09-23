@@ -130,6 +130,28 @@ def tick args
   args.outputs.labels << { x: 100.from_right, y: 20.from_top, r: 255, g: 255, b: 255, size_enum: -2, text: "FPS: #{args.gtk.current_framerate.to_sf}" }
 end
 
+# Angry villager
+class Enemy
+  attr_sprite
+  attr_accessor :health
+
+  def initialize xpos, ypos, villager_style, flip
+    @x = xpos
+    @y = ypos
+    @w = ENEMY_SPRITE_WIDTH
+    @h = ENEMY_SPRITE_HEIGHT
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @path = 'sprites/villager.png'
+    @tile_x = 0
+    @tile_y = villager_style
+    @tile_w = ENEMY_SPRITE_WIDTH
+    @tile_h = ENEMY_SPRITE_HEIGHT
+    @flip_horizontally = flip
+    @health = 1
+  end
+end
+
 # Healing or level up pickup
 class Pickup
   attr_sprite
@@ -202,21 +224,7 @@ module EntityFactory
   def self.make_enemy xpos,ypos
     $villager_style = ($villager_style + 42) % 84
     $villager_flip += 1
-    {
-      x: xpos,
-      y: ypos,
-      w: ENEMY_SPRITE_WIDTH,
-      h: ENEMY_SPRITE_HEIGHT,
-      anchor_x: 0.5,
-      anchor_y: 0.5,
-      path: 'sprites/villager.png',
-      tile_x: 0,
-      tile_y: $villager_style,
-      tile_w: ENEMY_SPRITE_WIDTH,
-      tile_h: ENEMY_SPRITE_HEIGHT,
-      flip_horizontally: ($villager_flip % 3) == 0,
-      health: 1
-    }
+    Enemy.new(xpos, ypos, $villager_style, ($villager_flip % 3) == 0)
   end
 
   # Punch wave (attached to the player)
