@@ -84,33 +84,11 @@ def vec2_angle_between a,b
   Math.atan2(vec2_cross(a,b), Geometry::vec2_dot_product(a,b))
 end
 
-def init_game args
-  # todo these should be in the gamestate class...
-  args.state.player         = EntityFactory::make_player
-  args.state.enemies        = []
-  args.state.player_attacks = []
-  args.state.world          = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
-  args.state.world.goal_location = PLAYER_START
-
-  args.state.start_time = Kernel.tick_count
-  args.state.seconds_survived = 0
-  args.state.xp = 0
-  args.state.player_level = 1
-
-  # Position player
-  ploc = args.state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
-  args.state.player.x, args.state.player.y = ploc.x, ploc.y
-
-  # Game logic runner
-  args.state.current_state = State_Gameplay.new args
-
-  puts "Initialized"
-end
-
 def tick args
   # Initialize/reinitialize
   if !args.state.initialized
-    init_game args
+    # Game logic runner
+    args.state.current_state = State_Gameplay.new args
     args.state.initialized = true
   end
 
@@ -271,11 +249,24 @@ class State_Gameplay
 
   def initialize args
     self.args = args
-    state.pickups       = []
-    state.dead_enemies  = []
-    state.xp            = 0
-    state.next_xp_level = 100
-    state.score = 0
+    state.player         = EntityFactory::make_player
+    state.enemies        = []
+    state.player_attacks = []
+    state.pickups        = []
+    state.dead_enemies   = []
+    state.world          = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
+    state.world.goal_location = PLAYER_START
+    state.start_time     = Kernel.tick_count
+    state.seconds_survived = 0
+    state.xp             = 0
+    state.player_level   = 1
+    state.score          = 0
+    state.xp             = 0
+    state.next_xp_level  = 100
+
+    # Position player
+    ploc = state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
+    state.player.x, state.player.y = ploc.x, ploc.y
   end
 
   def tick
