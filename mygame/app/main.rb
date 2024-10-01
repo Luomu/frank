@@ -149,6 +149,15 @@ class Enemy
     @tile_h = ENEMY_SPRITE_HEIGHT
     @flip_horizontally = flip
     @health = 1
+    @a = 255
+
+  end
+
+  def start_death
+    @r = 255
+    @g = 0
+    @b = 0
+    @a = 255
   end
 end
 
@@ -262,7 +271,8 @@ class State_Gameplay
 
   def initialize args
     self.args = args
-    state.pickups = []
+    state.pickups       = []
+    state.dead_enemies  = []
     state.xp            = 0
     state.next_xp_level = 100
     state.score = 0
@@ -275,9 +285,7 @@ class State_Gameplay
     args.state.world.goal_location = plr_loc
     args.state.world.tick
 
-    spawn_enemies args
-    collide_enemies
-    move_enemies_no_overlap
+    tick_enemies
     tick_player
     tick_pickups
 
@@ -293,7 +301,7 @@ class State_Gameplay
     #state.world.render_distance_field
 
     # Render characters
-    args.outputs.sprites << [state.pickups, state.enemies, state.player]
+    args.outputs.sprites << [state.pickups, state.dead_enemies, state.enemies, state.player]
     args.outputs.sprites << state.player_attacks
 
     debug_render_collision_rects
@@ -306,11 +314,11 @@ class State_Gameplay
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
   end
 
-  def spawn_enemies args
+  def spawn_enemies
     # Spawn enemies more frequently as the player's score increases.
-    if rand < (100+args.state.score)/(10000 + args.state.score) || Kernel.tick_count.zero?
+    if rand < (100+args.state.score)/(10000 + state.score) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
-      args.state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 600, 360 + Math.sin(theta) * 340)
+      state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 600, 360 + Math.sin(theta) * 340)
     end
   end
   
@@ -325,19 +333,11 @@ class State_Gameplay
 
     # Remove deads (put into a dead list while their death anim plays)
     args.state.enemies.reject! do |enemy|
-=begin
-      # Check if enemy and player are within X pixels of each other
-      if enemy.health > 0 && PLAYER_COLLIDE_RADIUS_SQ > (enemy.x - args.state.player.x) ** 2 + (enemy.y - args.state.player.y) ** 2
-        # Enemy is touching player. Kill enemy, and reduce player HP by 1.
-        args.state.player.health -= 1
-        enemy.health -= 1
-      else
-        # Player bullet/attack collisions
-      end
-=end
       if enemy.health <= 0
         give_score SCORE_PER_KILL
         state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
+        enemy.start_death
+        state.dead_enemies << enemy
         true
       end
     end
@@ -346,8 +346,8 @@ class State_Gameplay
   # Move enemies towards player. Use the current grid cell's vector
   # to move towards player's location, at close range use more precise
   # Direction towards player.
-  def move_enemies args
-    args.state.enemies.each do |enemy|
+  def move_enemies
+    state.enemies.each do |enemy|
       # Steer towards player
       # Get the angle from the enemy to the player
       #theta   = Math.atan2(enemy.y - args.state.player.y, enemy.x - args.state.player.x)
@@ -410,6 +410,16 @@ class State_Gameplay
         enemy.y += move_dir.y * ENEMY_MOVE_SPEED
       end
     end
+  end
+
+  def tick_enemies
+    spawn_enemies
+    collide_enemies
+    move_enemies_no_overlap
+
+    # Update death anim
+    state.dead_enemies.each { |enemy| enemy.a -= 5 }
+    state.dead_enemies.reject! {|enemy| enemy.a <= 0 }
   end
   
   def move_player
