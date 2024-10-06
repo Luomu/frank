@@ -3,7 +3,6 @@
 # Survive as long as you can
 #
 # TODO:
-# - Player attacks
 # - Collect bolts to level up and attack faster & stronger
 # - Collect electricity to heal
 # - More optimized collision between enemies
@@ -18,6 +17,14 @@ PLAYER_ATTACK_COOLDOWN = 65 # default, in ticks
 ENEMY_MOVE_SPEED  = 1.2
 SCORE_PER_KILL    = 10
 XP_PICKUP_VALUE   = 1
+MAX_LEVEL = 100
+XP_DATA = [
+  { xp: 0 }, #dummy
+  { xp: 0 }, #also dummy
+  { xp: 100, atk_up: 1 },  # lvl 2
+  { xp: 1000, spd_up: 1 }, # lvl 2
+  # etc.
+]
 
 GRID_DIMENSION    = 32
 CELL_SIZE         = 40
@@ -32,6 +39,7 @@ PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
 module Cheats
+  ENABLED = true
   GODMODE = false
 end
 
@@ -100,8 +108,14 @@ def tick args
 
   # Debug keys
   # Reset
-  if args.inputs.keyboard.key_down.r
-    $gtk.reset_next_tick
+  if Cheats::ENABLED
+    if args.inputs.keyboard.key_down.r
+      $gtk.reset_next_tick
+    end
+
+    if args.inputs.keyboard.key_down.l
+      args.state.xp = args.state.next_xp_level
+    end
   end
 
   # Debug stats
@@ -185,6 +199,44 @@ class HealthPickup < Pickup
   end
 end
 
+class Effect
+  attr_sprite
+  attr_accessor :life
+
+  def initialize x,y
+    @x    = x
+    @y    = y
+  end
+
+  def tick
+    @life -= 1
+  end
+
+  def is_finished?
+    @life < 0
+  end
+end
+
+class LevelUpEffect < Effect
+
+  def initialize x,y
+    super x,y
+    @life = 20
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @path = 'sprites/text-level-up.png'
+    @a = 255
+    @w = 103
+    @h = 33
+  end
+
+  def tick
+    super
+    @a = (@a - 10).greater(0)
+    @y += 1
+  end
+end
+
 module EntityFactory
   def self.make_player
     {
@@ -240,6 +292,10 @@ module EntityFactory
   def self.make_xp_pickup xpos, ypos
     ExperiencePickup.new(xpos, ypos)
   end
+
+  def self.make_fx_level_up xpos, ypos
+    LevelUpEffect.new(xpos, ypos)
+  end
 end # module EntityFactory
 
 # Running the game logic
@@ -252,6 +308,7 @@ class State_Gameplay
     state.player         = EntityFactory::make_player
     state.enemies        = []
     state.player_attacks = []
+    state.fx             = []
     state.pickups        = []
     state.dead_enemies   = []
     state.world          = WorldGrid.new args, GRID_DIMENSION, CELL_SIZE
@@ -262,7 +319,7 @@ class State_Gameplay
     state.player_level   = 1
     state.score          = 0
     state.xp             = 0
-    state.next_xp_level  = 100
+    state.next_xp_level  = player_get_next_xp_level state.player_level
 
     # Position player
     ploc = state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
@@ -279,6 +336,7 @@ class State_Gameplay
     tick_enemies
     tick_player
     tick_pickups
+    tick_fx
 
     # Game over check
     if args.state.player.health <= 0 && Cheats::GODMODE == false
@@ -293,9 +351,9 @@ class State_Gameplay
 
     # Render characters
     args.outputs.sprites << [state.pickups, state.dead_enemies, state.enemies, state.player]
-    args.outputs.sprites << state.player_attacks
+    args.outputs.sprites << [state.fx, state.player_attacks]
 
-    debug_render_collision_rects
+    debug_render_collision_rects if args.state.debug_enabled
 
     render_hud
 
@@ -303,6 +361,16 @@ class State_Gameplay
     outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
     outputs.debug << "HP #{state.player.health.to_i}"
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
+  end
+
+  def player_get_next_xp_level current_level
+    next_level = current_level + 1
+    if next_level < MAX_LEVEL#XP_DATA.length
+      (next_level**2 / 0.08).floor
+      #XP_DATA[current_level+1].xp
+    else
+      0
+    end
   end
 
   def spawn_enemies
@@ -457,6 +525,16 @@ class State_Gameplay
     end
 
     state.player_attacks.reject! {|attack| attack.life <= 0 }
+
+    # Leveling up
+    if state.next_xp_level > 0 && state.xp >= state.next_xp_level
+      state.player_level += 1
+      state.xp -= state.xp
+      state.next_xp_level = player_get_next_xp_level state.player_level
+
+      # Level up fx
+      state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
+    end
   end
 
   def tick_pickups
@@ -464,10 +542,19 @@ class State_Gameplay
     collisions.each do |pickup|
       pickup.pick_up args.state
     end
+
     # Collide pickups
     # Animate pickups upon collect
     # Reject removed pickups
     state.pickups.reject! {|pickup| pickup.activated }
+  end
+
+  def tick_fx
+    state.fx.each do |effect|
+      effect.tick
+    end
+
+    state.fx.reject! {|effect| effect.is_finished?}
   end
 
   def render_hud
@@ -490,6 +577,7 @@ class State_Gameplay
     # Experience bar at the top of the screen
     xp        = state.xp
     xp_to_lvl = state.next_xp_level
+    level     = state.player_level
     xp_bar_pos_x = 180
     xp_bar_pos_y = 30.from_top
     xp_bar_fill  = (xp/xp_to_lvl).clamp(0,1)
@@ -499,7 +587,7 @@ class State_Gameplay
     args.outputs.labels << { x: 640, y: 34.from_top,
       r: 255, g: 255, b: 255, size_enum: -4,
       alignment_enum: 1,
-      text: "LVL 1 (#{xp}/#{xp_to_lvl})"
+      text: "LVL #{level} (#{xp}/#{xp_to_lvl})"
     }
   
     # Score (gold)
