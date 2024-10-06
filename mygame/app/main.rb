@@ -377,7 +377,7 @@ class State_Gameplay
     # Spawn enemies more frequently as the player's score increases.
     if rand < (100+args.state.score)/(10000 + state.score) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
-      state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 600, 360 + Math.sin(theta) * 340)
+      state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 800, 360 + Math.sin(theta) * 500)
     end
   end
   
@@ -442,10 +442,26 @@ class State_Gameplay
       # Read direction from the vector field
       current_loc = state.world.world_to_coord enemy.x, enemy.y
       current_idx = state.world.coord_to_index current_loc.x, current_loc.y
-      enemy.tile_x = (current_idx % 2 == 0) ? 0 : ENEMY_SPRITE_WIDTH
+      enemy.tile_x = (current_idx % 2 == 0) ? 0 : ENEMY_SPRITE_WIDTH # 2 frame animation
       move_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
 
-      move_delta = { x: move_dir.x * ENEMY_MOVE_SPEED, y: move_dir.y * ENEMY_MOVE_SPEED}
+      # Check if the enemy should steer directly towards the player (at 0 distance, or outside play area)
+      if state.world.outside_world? current_loc
+        dir_steer = true
+      elsif state.world.distance_field[current_idx] <= 0
+        dir_steer = true
+      end
+
+      #move_delta = { x: move_dir.x * ENEMY_MOVE_SPEED, y: move_dir.y * ENEMY_MOVE_SPEED}
+
+      # Get the angle from the enemy to the player
+      if dir_steer
+        theta   = Math.atan2(enemy.y - args.state.player.y, enemy.x - args.state.player.x)
+        # Convert the angle to a vector pointing at the player
+        move_dir  = theta.to_degrees.to_vector ENEMY_MOVE_SPEED
+        move_dir.x = -move_dir.x
+        move_dir.y = -move_dir.y
+      end
 
       # Don't move, if we would overlap others
       move_blocked = false
@@ -649,6 +665,7 @@ class WorldGrid
 
   attr_accessor :goal_location
   attr_reader   :vector_field
+  attr_reader   :distance_field
 
   def initialize args, dimension, cell_size
     @args = args
@@ -723,6 +740,10 @@ class WorldGrid
     local_x = x.clamp(0, @width - 1)
     local_y = y.clamp(0, @height - 1)
     { x: @origin.x + local_x * @cell_size + @cell_half_size, y: @origin.y + local_y * @cell_size + @cell_half_size }
+  end
+
+  def outside_world? loc
+    loc.x < 0 || loc.y < 0 || loc.x >= @width || loc.y >= @height
   end
 
   # Debug draw functions
