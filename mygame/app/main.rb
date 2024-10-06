@@ -30,7 +30,7 @@ GRID_DIMENSION    = 32
 CELL_SIZE         = 40
 WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
-ENEMY_RADIUS         = 25
+ENEMY_RADIUS         = 16
 ENEMY_COLLIDE_RADIUS = (ENEMY_RADIUS + ENEMY_RADIUS) / 2.0
 ENEMY_SPRITE_HEIGHT  = 42
 ENEMY_SPRITE_WIDTH   = 32
@@ -126,10 +126,16 @@ end
 class Enemy
   attr_sprite
   attr_accessor :health
+  attr_accessor :prev_x
+  attr_accessor :prev_y
+  attr_reader   :radius
 
   def initialize xpos, ypos, villager_style, flip
-    @x = xpos
-    @y = ypos
+    @x      = xpos
+    @y      = ypos
+    @prev_x = xpos
+    @prev_y = ypos
+    @radius = ENEMY_RADIUS
     @w = ENEMY_SPRITE_WIDTH
     @h = ENEMY_SPRITE_HEIGHT
     @anchor_x = 0.5
@@ -375,7 +381,7 @@ class State_Gameplay
 
   def spawn_enemies
     # Spawn enemies more frequently as the player's score increases.
-    if rand < (100+args.state.score)/(10000 + state.score) || Kernel.tick_count.zero?
+    if rand < 0.9#(100+args.state.score)/(10000 + state.score) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
       state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 800, 360 + Math.sin(theta) * 500)
     end
@@ -404,29 +410,6 @@ class State_Gameplay
       end
     end
   end
-  
-  # Move enemies towards player. Use the current grid cell's vector
-  # to move towards player's location, at close range use more precise
-  # Direction towards player.
-  def move_enemies
-    state.enemies.each do |enemy|
-      # Steer towards player
-      # Get the angle from the enemy to the player
-      #theta   = Math.atan2(enemy.y - args.state.player.y, enemy.x - args.state.player.x)
-      # Convert the angle to a vector pointing at the player
-      #dx, dy  = theta.to_degrees.vector ENEMY_MOVE_SPEED
-      # Move the enemy towards thr player
-      #enemy.x -= dx
-      #enemy.y -= dy
-
-      # Read direction from the vector field
-      current_loc = state.world.world_to_coord enemy.x, enemy.y
-      current_idx = state.world.coord_to_index current_loc.x, current_loc.y
-      best_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
-      enemy.x += best_dir.x * ENEMY_MOVE_SPEED
-      enemy.y += best_dir.y * ENEMY_MOVE_SPEED
-    end
-  end
 
   def check_enemy_overlap a, b
     pos_diff = {
@@ -437,7 +420,7 @@ class State_Gameplay
     mag <= ENEMY_COLLIDE_RADIUS
   end
 
-  def move_enemies_no_overlap
+  def move_enemies
     state.enemies.each do |enemy|
       # Read direction from the vector field
       current_loc = state.world.world_to_coord enemy.x, enemy.y
@@ -458,34 +441,58 @@ class State_Gameplay
       if dir_steer
         theta   = Math.atan2(enemy.y - args.state.player.y, enemy.x - args.state.player.x)
         # Convert the angle to a vector pointing at the player
-        move_dir  = theta.to_degrees.to_vector ENEMY_MOVE_SPEED
+        move_dir  = theta.to_degrees.to_vector
         move_dir.x = -move_dir.x
         move_dir.y = -move_dir.y
       end
 
-      # Don't move, if we would overlap others
-      move_blocked = false
-      state.enemies.each do |other_enemy|
-        next if enemy == other_enemy
-        break if move_blocked
+      drag_x = 0.96
+      drag_y = 0.96
+      acceleration_x = move_dir.x * 0.01
+      acceleration_y = move_dir.y * 0.01
 
-        # https://www.youtube.com/watch?v=UAlYELsxYfs
-        # The enemies overlap, check if we are moving towards or away
-        dir_to_other = vec2_subtract({x:other_enemy.x, y:other_enemy.y}, {x:enemy.x, y:enemy.y})
-        mag          = Geometry::vec2_magnitude dir_to_other
-        # not overlapping (todo merge with above check)
-        if mag > 1 && mag < ENEMY_COLLIDE_RADIUS
-          normal_to_other = Geometry::vec2_normalize dir_to_other
-          angle_between   = (vec2_angle_between normal_to_other, move_dir).abs
-          if angle_between < Math::PI / 4.0
-            move_blocked = true
-          end
-        end
-      end
+      dt = 0.5
+      dx = enemy.x - enemy.prev_x
+      dy = enemy.y - enemy.prev_y
+      dx += acceleration_x * dt
+      dy += acceleration_y * dt
+      #dx += move_dir.x * ENEMY_MOVE_SPEED
+      #dy += move_dir.y * ENEMY_MOVE_SPEED
+      dx *= drag_x ** dt
+      dy *= drag_y ** dt
 
-      if !move_blocked
-        enemy.x += move_dir.x * ENEMY_MOVE_SPEED
-        enemy.y += move_dir.y * ENEMY_MOVE_SPEED
+      enemy.prev_x = enemy.x
+      enemy.prev_y = enemy.y
+      enemy.x += dx
+      enemy.y += dy
+    end
+
+    # Enemy to Enemy collisions
+    dt = 0.5
+    Geometry.each_intersect_rect(state.enemies, state.enemies) do |o_1, o_2|
+      o_1_center_x = o_1.x
+      o_1_center_y = o_1.y
+      o_2_center_x = o_2.x
+      o_2_center_y = o_2.y
+
+      distance_x = o_1_center_x - o_2_center_x
+      distance_y = o_1_center_y - o_2_center_y
+      distance = Math.sqrt(distance_x * distance_x + distance_y * distance_y)
+
+      if distance < o_1.radius + o_2.radius
+        v_x = (o_2_center_x - o_1_center_x) / distance
+        v_y = (o_2_center_y - o_1_center_y) / distance
+        delta = o_1.radius + o_2.radius - distance
+
+        o_1_dx = -0.75 * dt * delta * v_x * 0.5
+        o_1_dy = -0.75 * dt * delta * v_y * 0.5
+        o_1.x += o_1_dx
+        o_1.y += o_1_dy
+
+        o_2_dx = 0.75 * dt * delta * v_x * 0.5
+        o_2_dy = 0.75 * dt * delta * v_y * 0.5
+        o_2.x += o_2_dx
+        o_2.y += o_2_dy
       end
     end
   end
@@ -493,7 +500,7 @@ class State_Gameplay
   def tick_enemies
     spawn_enemies
     collide_enemies
-    move_enemies_no_overlap
+    move_enemies
 
     # Update death anim
     state.dead_enemies.each { |enemy| enemy.a -= 5 }
