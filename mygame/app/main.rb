@@ -383,8 +383,11 @@ class State_Gameplay
   
   # Collide enemies with player (they die in 1 hit and damage player)
   def collide_enemies
+    player_hitbox = { x: state.player.x, y: state.player.y, w: 12, h: 18, r: 30, g: 255, b: 30, a: 255, anchor_x: 0.5, anchor_y: 0.5}
+    #args.outputs.borders << player_hitbox
+
     # Collide against player
-    collisions = state.enemies.find_all { |b| b.intersect_rect? state.player }
+    collisions = state.enemies.find_all { |b| b.intersect_rect? player_hitbox }
     collisions.each do |enemy|
       enemy.health -= 1
       state.player.health -= 1
