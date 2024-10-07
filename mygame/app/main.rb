@@ -10,22 +10,16 @@
 # - Obstacles
 # - Perf: refactor sprites to use classes
 
+require 'app/curves.rb'
+
 # Constants
 PLAYER_HEALTH     = 16
 PLAYER_MOVE_SPEED = 4.5
-PLAYER_ATTACK_COOLDOWN = 65 # default, in ticks
 ENEMY_MOVE_SPEED  = 0.1
 ENEMY_DRAG        = 0.75
 SCORE_PER_KILL    = 10
 XP_PICKUP_VALUE   = 1
 MAX_LEVEL = 100
-XP_DATA = [
-  { xp: 0 }, #dummy
-  { xp: 0 }, #also dummy
-  { xp: 100, atk_up: 1 },  # lvl 2
-  { xp: 1000, spd_up: 1 }, # lvl 2
-  # etc.
-]
 
 GRID_DIMENSION    = 32
 CELL_SIZE         = 40
@@ -38,6 +32,16 @@ ENEMY_SPRITE_WIDTH   = 32
 PLAYER_SPRITE_WIDTH  = 32
 PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
+
+# Player stats scaling
+# Attack cooldown, in ticks
+Player_Attack_Cooldown_Curve = Curve.new(:linear,
+  [
+    [1,   65],
+    [10,  45],
+    [100, 15],
+  ]
+)
 
 module Cheats
   ENABLED = true
@@ -101,6 +105,8 @@ def tick args
   if !args.state.initialized
     # Game logic runner
     args.state.current_state = State_Gameplay.new args
+    # Used to visualize lvl up curves
+    #args.state.current_state = State_CurveTest.new args
     args.state.initialized = true
   end
 
@@ -266,8 +272,8 @@ module EntityFactory
       anchor_x: 0.5, anchor_y: 0.5,
       health:     PLAYER_HEALTH,
       health_max: PLAYER_HEALTH,
-      attack_cooldown:     PLAYER_ATTACK_COOLDOWN,
-      attack_cooldown_max: PLAYER_ATTACK_COOLDOWN,
+      attack_cooldown:     Player_Attack_Cooldown_Curve.evaluate(1),
+      attack_cooldown_max: Player_Attack_Cooldown_Curve.evaluate(1),
       score:  0
     }
   end
@@ -375,16 +381,30 @@ class State_Gameplay
     outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
     outputs.debug << "HP #{state.player.health.to_i}"
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
+    outputs.debug << "Attack #{state.player.attack_cooldown_max.to_i}"
   end
 
   def player_get_next_xp_level current_level
     next_level = current_level + 1
-    if next_level < MAX_LEVEL#XP_DATA.length
+    if next_level < MAX_LEVEL
       (next_level**2 / 0.08).floor
-      #XP_DATA[current_level+1].xp
     else
       0
     end
+  end
+
+  def player_get_attack_cooldown_for_level level
+    Player_Attack_Cooldown_Curve.evaluate(level)
+  end
+
+  def player_level_up state
+    state.player_level += 1
+    state.xp -= state.xp
+    state.next_xp_level = player_get_next_xp_level state.player_level
+    state.player.attack_cooldown_max = player_get_attack_cooldown_for_level state.player_level
+
+    # Level up fx
+    state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
   end
 
   def spawn_enemies
@@ -549,12 +569,7 @@ class State_Gameplay
 
     # Leveling up
     if state.next_xp_level > 0 && state.xp >= state.next_xp_level
-      state.player_level += 1
-      state.xp -= state.xp
-      state.next_xp_level = player_get_next_xp_level state.player_level
-
-      # Level up fx
-      state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
+      player_level_up state
     end
   end
 
@@ -677,7 +692,7 @@ class WorldGrid
     @inv_cell_size = 1 / cell_size
     @origin        = { x: 0, y: 0 }
 
-    @cell_half_size     = @cell_size / 2
+    @cell_half_size = @cell_size / 2
 
     @goal_location = { x:0, y:0 }
 
@@ -873,4 +888,54 @@ class WorldGrid
       @vector_field[idx] = best_direction
     end
   end
+end
+
+# Debug visualization of level up curves
+class State_CurveTest
+  attr_gtk
+
+  def initialize args
+    self.args = args
+  end
+
+  def tick
+    draw_curve args, Player_Attack_Cooldown_Curve, 10, 10, [128, 43, 67]
+  end
+
+  # Evaluate the curve and draw it
+  def draw_curve args, curve, x_offs, y_offs, color
+    NumPoints = 10
+    Size      = 300
+    pts = []
+    s = curve.start_time
+    e = curve.end_time
+    incr = (e - s) / NumPoints
+    time = s
+    y_scale = Size / curve.calculate_max
+    x_scale = Size / (NumPoints * incr)
+    (0..NumPoints).each do |i|
+      time = i * incr
+      pts << [
+        time * x_scale + x_offs,
+        curve.evaluate(time) * y_scale + y_offs
+      ]
+    end
+
+    #Rendering.set_color COLOR_LAVENDER_P8
+    #Rendering.rectangle(x_offs-2,y_offs-2,Size+4,Size+4)
+    render_line_strip(pts, color)
+  end
+
+  # Render a continuous line from an array of points [[x,y],[x,y]...]
+  def render_line_strip point_array, draw_color
+      return if !point_array.is_a? Array || point_array.length < 2
+
+      (1..point_array.length-1).each do |idx|
+        e_x = point_array[idx][0]
+        e_y = point_array[idx][1]
+        s_x = point_array[idx-1][0]
+        s_y = point_array[idx-1][1]
+        $gtk.args.outputs.lines << [s_x, s_y, e_x, e_y, *draw_color]
+      end
+    end
 end
