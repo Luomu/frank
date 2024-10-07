@@ -14,7 +14,8 @@
 PLAYER_HEALTH     = 16
 PLAYER_MOVE_SPEED = 4.5
 PLAYER_ATTACK_COOLDOWN = 65 # default, in ticks
-ENEMY_MOVE_SPEED  = 1.2
+ENEMY_MOVE_SPEED  = 0.1
+ENEMY_DRAG        = 0.75
 SCORE_PER_KILL    = 10
 XP_PICKUP_VALUE   = 1
 MAX_LEVEL = 100
@@ -30,8 +31,8 @@ GRID_DIMENSION    = 32
 CELL_SIZE         = 40
 WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
-ENEMY_RADIUS         = 16
-ENEMY_COLLIDE_RADIUS = (ENEMY_RADIUS + ENEMY_RADIUS) / 2.0
+MAX_ENEMIES          = 600
+ENEMY_RADIUS         = 18 # used for enemy-to-enemy collisions
 ENEMY_SPRITE_HEIGHT  = 42
 ENEMY_SPRITE_WIDTH   = 32
 PLAYER_SPRITE_WIDTH  = 32
@@ -42,6 +43,9 @@ module Cheats
   ENABLED = true
   GODMODE = false
 end
+
+$debug_show_grid       = false
+$debug_show_collisions = false
 
 PLAYER_START = { x: 10, y: 10 }
 
@@ -115,6 +119,10 @@ def tick args
 
     if args.inputs.keyboard.key_down.l
       args.state.xp = args.state.next_xp_level
+    end
+
+    if args.inputs.keyboard.key_down.p
+      $debug_show_grid = !$debug_show_grid
     end
   end
 
@@ -353,13 +361,13 @@ class State_Gameplay
 
     # Render world
     #state.world.render_grid_lines
-    #state.world.render_distance_field
+    state.world.render_distance_field if $debug_show_grid
 
     # Render characters
     args.outputs.sprites << [state.pickups, state.dead_enemies, state.enemies, state.player]
     args.outputs.sprites << [state.fx, state.player_attacks]
 
-    debug_render_collision_rects if args.state.debug_enabled
+    debug_render_collision_rects if $debug_show_collisions
 
     render_hud
 
@@ -381,6 +389,7 @@ class State_Gameplay
 
   def spawn_enemies
     # Spawn enemies more frequently as the player's score increases.
+    return if state.enemies.length > MAX_ENEMIES
     if rand < 0.9#(100+args.state.score)/(10000 + state.score) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
       state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 800, 360 + Math.sin(theta) * 500)
@@ -411,16 +420,8 @@ class State_Gameplay
     end
   end
 
-  def check_enemy_overlap a, b
-    pos_diff = {
-      x: b.x - a.x,
-      y: b.y - a.y
-    }
-    mag = Geometry::vec2_magnitude pos_diff
-    mag <= ENEMY_COLLIDE_RADIUS
-  end
-
   def move_enemies
+    dt = 0.5
     state.enemies.each do |enemy|
       # Read direction from the vector field
       current_loc = state.world.world_to_coord enemy.x, enemy.y
@@ -429,13 +430,12 @@ class State_Gameplay
       move_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
 
       # Check if the enemy should steer directly towards the player (at 0 distance, or outside play area)
+      # note: they could also be inside walls
       if state.world.outside_world? current_loc
         dir_steer = true
       elsif state.world.distance_field[current_idx] <= 0
         dir_steer = true
       end
-
-      #move_delta = { x: move_dir.x * ENEMY_MOVE_SPEED, y: move_dir.y * ENEMY_MOVE_SPEED}
 
       # Get the angle from the enemy to the player
       if dir_steer
@@ -446,20 +446,15 @@ class State_Gameplay
         move_dir.y = -move_dir.y
       end
 
-      drag_x = 0.96
-      drag_y = 0.96
-      acceleration_x = move_dir.x * 0.01
-      acceleration_y = move_dir.y * 0.01
+      acceleration_x = move_dir.x * ENEMY_MOVE_SPEED
+      acceleration_y = move_dir.y * ENEMY_MOVE_SPEED
 
-      dt = 0.5
       dx = enemy.x - enemy.prev_x
       dy = enemy.y - enemy.prev_y
       dx += acceleration_x * dt
       dy += acceleration_y * dt
-      #dx += move_dir.x * ENEMY_MOVE_SPEED
-      #dy += move_dir.y * ENEMY_MOVE_SPEED
-      dx *= drag_x ** dt
-      dy *= drag_y ** dt
+      dx *= ENEMY_DRAG ** dt
+      dy *= ENEMY_DRAG ** dt
 
       enemy.prev_x = enemy.x
       enemy.prev_y = enemy.y
@@ -468,7 +463,7 @@ class State_Gameplay
     end
 
     # Enemy to Enemy collisions
-    dt = 0.5
+    # Deflect overlapping enemies away from each other
     Geometry.each_intersect_rect(state.enemies, state.enemies) do |o_1, o_2|
       o_1_center_x = o_1.x
       o_1_center_y = o_1.y
