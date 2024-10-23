@@ -9,6 +9,7 @@
 # - Scrolling
 # - Obstacles
 # - Perf: refactor sprites to use classes
+# - Probably need a Weapon class for better attack control
 
 require 'app/curves.rb'
 
@@ -34,6 +35,8 @@ PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
 # Player stats scaling
+SIDE_ATTACK_LEVEL = 5
+
 # Attack cooldown, in ticks
 Player_Attack_Cooldown_Curve = Curve.new(:linear,
   [
@@ -108,6 +111,15 @@ def tick args
     # Used to visualize lvl up curves
     #args.state.current_state = State_CurveTest.new args
     args.state.initialized = true
+    args.audio[:track_1] = {
+      input: "sounds/music-stage1.ogg",
+      gain: 0.0,
+      looping: true
+    }
+  end
+
+  if args.audio[:track_1].gain < 1.0
+    args.audio[:track_1].gain += 0.001
   end
 
   # Execute current game state (menu, gameplay or gameover)
@@ -210,12 +222,14 @@ class ExperiencePickup < Pickup
 end
 
 class HealthPickup < Pickup
-  def initialize
+  def initialize x,y
     super x,y,32
   end
 
   def pick_up state
     super state
+    state.player.health = state.player.health_max
+    state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
   end
 end
 
@@ -257,6 +271,25 @@ class LevelUpEffect < Effect
   end
 end
 
+class HealEffect < Effect
+  def initialize x,y
+    super x,y
+    @life = 20
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @path = 'sprites/text-level-up.png'
+    @a = 255
+    @w = 103
+    @h = 33
+  end
+
+  def tick
+    super
+    @a = (@a - 10).greater(0)
+    @y += 1
+  end
+end
+
 module EntityFactory
   def self.make_player
     {
@@ -272,9 +305,11 @@ module EntityFactory
       anchor_x: 0.5, anchor_y: 0.5,
       health:     PLAYER_HEALTH,
       health_max: PLAYER_HEALTH,
+
+      #Attack stats
       attack_cooldown:     Player_Attack_Cooldown_Curve.evaluate(1),
       attack_cooldown_max: Player_Attack_Cooldown_Curve.evaluate(1),
-      score:  0
+      side_attack: false
     }
   end
 
@@ -313,8 +348,16 @@ module EntityFactory
     ExperiencePickup.new(xpos, ypos)
   end
 
+  def self.make_health_pickup xpos, ypos
+    HealthPickup.new(xpos, ypos)
+  end
+
   def self.make_fx_level_up xpos, ypos
     LevelUpEffect.new(xpos, ypos)
+  end
+
+  def self.make_fx_heal xpos, ypos
+    HealEffect.new(xpos, ypos)
   end
 end # module EntityFactory
 
@@ -403,6 +446,10 @@ class State_Gameplay
     state.next_xp_level = player_get_next_xp_level state.player_level
     state.player.attack_cooldown_max = player_get_attack_cooldown_for_level state.player_level
 
+    if state.player_level >= SIDE_ATTACK_LEVEL
+      state.player.side_attack = true
+    end
+
     # Level up fx
     state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
   end
@@ -410,9 +457,18 @@ class State_Gameplay
   def spawn_enemies
     # Spawn enemies more frequently as the player's score increases.
     return if state.enemies.length > MAX_ENEMIES
-    if rand < 0.9#(100+args.state.score)/(10000 + state.score) || Kernel.tick_count.zero?
+    if rand < (100+args.state.score)/(10000 + state.score) || Kernel.tick_count.zero?
       theta = rand * Math::PI * 2
       state.enemies << EntityFactory::make_enemy(640 + Math.cos(theta) * 800, 360 + Math.sin(theta) * 500)
+    end
+  end
+
+  # XP, health or nothing
+  def spawn_pickup enemy
+    if (state.player.health / state.player.health_max) < 0.9
+      state.pickups << EntityFactory.make_health_pickup(enemy.x,enemy.y)
+    else
+      state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
     end
   end
   
@@ -432,7 +488,7 @@ class State_Gameplay
     args.state.enemies.reject! do |enemy|
       if enemy.health <= 0
         give_score SCORE_PER_KILL
-        state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
+        spawn_pickup enemy
         enemy.start_death
         state.dead_enemies << enemy
         true
@@ -550,6 +606,9 @@ class State_Gameplay
     if state.player.attack_cooldown <= 0
       state.player.attack_cooldown = state.player.attack_cooldown_max
       state.player_attacks << EntityFactory::make_player_attack(25, 0, state.player.flip_horizontally)
+      if state.player.side_attack
+        state.player_attacks << EntityFactory::make_player_attack(25, 0, !state.player.flip_horizontally)
+      end
     end
 
     state.player_attacks.each do |attack|
