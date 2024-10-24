@@ -10,6 +10,7 @@
 # - Obstacles
 # - Perf: refactor sprites to use classes
 # - Probably need a Weapon class for better attack control
+# - Weapon 2: Throw a flask that creates fire (?) that marks the area as an obstacle!
 
 require 'app/curves.rb'
 
@@ -34,10 +35,10 @@ PLAYER_SPRITE_WIDTH  = 32
 PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
-# Player stats scaling
-SIDE_ATTACK_LEVEL = 5
+# Player weapons balancing
+FIST_SIDE_ATTACK_LEVEL = 5
 
-# Attack cooldown, in ticks
+# Fist attack cooldown, in ticks
 Player_Attack_Cooldown_Curve = Curve.new(:linear,
   [
     [1,   65],
@@ -148,6 +149,61 @@ def tick args
   args.outputs.labels << { x: 100.from_right, y: 20.from_top, r: 255, g: 255, b: 255, size_enum: -2, text: "FPS: #{args.gtk.current_framerate.to_sf}" }
 end
 
+# Thing that hurts enemies
+# Weapon 1: Punches (leveling up increases count and directions)
+# Weapon 2: Potion (creates acid that damages enemies and marks an area as obstacle)
+class Weapon
+  attr_accessor :attack_cooldown
+  attr_accessor :attack_cooldown_max
+
+  def initialize
+    @attack_cooldown = 0
+    @attack_cooldown = 0
+  end
+
+  # Increase efficiency on player level up
+  def level_up new_level
+  end
+
+  def tick args
+  end
+end
+
+class FrankFist < Weapon
+  def initialize
+    super
+    @attack_cooldown     = Player_Attack_Cooldown_Curve.evaluate(1)
+    @attack_cooldown_max = Player_Attack_Cooldown_Curve.evaluate(1)
+    @side_attack         = false
+  end
+
+  def level_up new_level
+    # Todo move cooldown to wpns entirely
+    @attack_cooldown_max = Player_Attack_Cooldown_Curve.evaluate(new_level)
+
+    if new_level >= FIST_SIDE_ATTACK_LEVEL
+      @side_attack = true #todo refactor to multiattack
+    end
+  end
+
+  def tick args
+    state = args.state
+    @attack_cooldown -= 1
+    if @attack_cooldown <= 0
+      @attack_cooldown = @attack_cooldown_max
+      state.player_attacks << EntityFactory::make_player_attack(25, 0, state.player.flip_horizontally)
+      if @side_attack
+        state.player_attacks << EntityFactory::make_player_attack(25, 0, !state.player.flip_horizontally)
+      end
+    end
+  end
+end
+
+class AcidFlask < Weapon
+  def tick args
+  end
+end
+
 # Angry villager
 class Enemy
   attr_sprite
@@ -251,8 +307,8 @@ class Effect
   end
 end
 
+ # "LEVEL UP" text
 class LevelUpEffect < Effect
-
   def initialize x,y
     super x,y
     @life = 20
@@ -271,13 +327,14 @@ class LevelUpEffect < Effect
   end
 end
 
+# "LIFE UP" text or heart icon
 class HealEffect < Effect
   def initialize x,y
     super x,y
     @life = 20
     @anchor_x = 0.5
     @anchor_y = 0.5
-    @path = 'sprites/text-level-up.png'
+    @path = 'sprites/text-level-up.png' # needs text!
     @a = 255
     @w = 103
     @h = 33
@@ -305,11 +362,6 @@ module EntityFactory
       anchor_x: 0.5, anchor_y: 0.5,
       health:     PLAYER_HEALTH,
       health_max: PLAYER_HEALTH,
-
-      #Attack stats
-      attack_cooldown:     Player_Attack_Cooldown_Curve.evaluate(1),
-      attack_cooldown_max: Player_Attack_Cooldown_Curve.evaluate(1),
-      side_attack: false
     }
   end
 
@@ -383,6 +435,7 @@ class State_Gameplay
     state.score          = 0
     state.xp             = 0
     state.next_xp_level  = player_get_next_xp_level state.player_level
+    state.player_weapons = [ FrankFist.new ]
 
     # Position player
     ploc = state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
@@ -424,7 +477,7 @@ class State_Gameplay
     outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
     outputs.debug << "HP #{state.player.health.to_i}"
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
-    outputs.debug << "Attack #{state.player.attack_cooldown_max.to_i}"
+    outputs.debug << "Attack #{state.player_weapons[0].attack_cooldown_max.to_i}"
   end
 
   def player_get_next_xp_level current_level
@@ -436,19 +489,13 @@ class State_Gameplay
     end
   end
 
-  def player_get_attack_cooldown_for_level level
-    Player_Attack_Cooldown_Curve.evaluate(level)
-  end
-
   def player_level_up state
     state.player_level += 1
     state.xp -= state.xp
     state.next_xp_level = player_get_next_xp_level state.player_level
-    state.player.attack_cooldown_max = player_get_attack_cooldown_for_level state.player_level
 
-    if state.player_level >= SIDE_ATTACK_LEVEL
-      state.player.side_attack = true
-    end
+    # Improve weapons
+    state.player_weapons.each { |w| w.level_up state.player_level }
 
     # Level up fx
     state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
@@ -602,15 +649,11 @@ class State_Gameplay
     move_player
 
     # Attack
-    state.player.attack_cooldown -= 1
-    if state.player.attack_cooldown <= 0
-      state.player.attack_cooldown = state.player.attack_cooldown_max
-      state.player_attacks << EntityFactory::make_player_attack(25, 0, state.player.flip_horizontally)
-      if state.player.side_attack
-        state.player_attacks << EntityFactory::make_player_attack(25, 0, !state.player.flip_horizontally)
-      end
+    state.player_weapons.each do |wpn|
+      wpn.tick args
     end
 
+    # Update attack fx
     state.player_attacks.each do |attack|
       attack.x = attack.xoffs + state.player.x
       attack.y = attack.yoffs + state.player.y
