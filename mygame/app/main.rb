@@ -35,15 +35,21 @@ PLAYER_SPRITE_WIDTH  = 32
 PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
-# Player weapons balancing
-FIST_SIDE_ATTACK_LEVEL = 5
-
+# Weapon balancing data
 # Fist attack cooldown, in ticks
-Player_Attack_Cooldown_Curve = Curve.new(:linear,
+Player_Fist_Attack_Cooldown_Curve = Curve.new(:linear,
   [
     [1,   65],
     [10,  45],
-    [100, 15],
+    [100, 20],
+  ]
+)
+
+# Secondary attacks for fist, faster when leveling
+Player_Fist_Sub_Attack_Cooldown_Curve = Curve.new(:linear,
+  [
+    [1,   20],
+    [100, 10],
   ]
 )
 
@@ -170,19 +176,31 @@ class Weapon
 end
 
 class FrankFist < Weapon
+  attr_reader :sub_attack_cooldown_max
+
   def initialize
     super
-    @attack_cooldown     = Player_Attack_Cooldown_Curve.evaluate(1)
-    @attack_cooldown_max = Player_Attack_Cooldown_Curve.evaluate(1)
-    @side_attack         = false
+    @attack_cooldown         = Player_Fist_Attack_Cooldown_Curve.evaluate(1)
+    @attack_cooldown_max     = Player_Fist_Attack_Cooldown_Curve.evaluate(1)
+    @num_sub_attacks         = 1
+    @curr_sub_attack         = 0
+    @sub_attack_cooldown_max = Player_Fist_Sub_Attack_Cooldown_Curve.evaluate(1)
+    @player_side_on_start    = false # keeps the attack pattern predictable if changing facing mid-attack
   end
 
   def level_up new_level
-    # Todo move cooldown to wpns entirely
-    @attack_cooldown_max = Player_Attack_Cooldown_Curve.evaluate(new_level)
+    @attack_cooldown_max     = Player_Fist_Attack_Cooldown_Curve.evaluate(new_level)
+    @sub_attack_cooldown_max = Player_Fist_Sub_Attack_Cooldown_Curve.evaluate(new_level)
 
-    if new_level >= FIST_SIDE_ATTACK_LEVEL
-      @side_attack = true #todo refactor to multiattack
+    case new_level
+    when 1..2
+      @num_sub_attacks = 1
+    when 3..4
+      @num_sub_attacks = 2
+    when 5..6
+      @num_sub_attacks = 3
+    else
+      @num_sub_attacks = 4
     end
   end
 
@@ -190,10 +208,25 @@ class FrankFist < Weapon
     state = args.state
     @attack_cooldown -= 1
     if @attack_cooldown <= 0
-      @attack_cooldown = @attack_cooldown_max
-      state.player_attacks << EntityFactory::make_player_attack(25, 0, state.player.flip_horizontally)
-      if @side_attack
-        state.player_attacks << EntityFactory::make_player_attack(25, 0, !state.player.flip_horizontally)
+      @curr_sub_attack += 1
+
+      case @curr_sub_attack
+      when 1 # right!
+        @player_side_on_start = state.player.flip_horizontally
+        state.player_attacks << EntityFactory::make_player_attack(25, 0, @player_side_on_start)
+      when 2 # left!
+        state.player_attacks << EntityFactory::make_player_attack(25, 0, !@player_side_on_start)
+      when 3 # left up!
+        state.player_attacks << EntityFactory::make_player_attack(15, 15, @player_side_on_start)
+      when 4 # right up!
+        state.player_attacks << EntityFactory::make_player_attack(15, 15, !@player_side_on_start)
+      end
+
+      if @curr_sub_attack >= @num_sub_attacks # reset sequence
+        @attack_cooldown = @attack_cooldown_max
+        @curr_sub_attack = 0
+      else # queue next atk in sequence
+        @attack_cooldown = @sub_attack_cooldown_max
       end
     end
   end
@@ -477,7 +510,7 @@ class State_Gameplay
     outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
     outputs.debug << "HP #{state.player.health.to_i}"
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
-    outputs.debug << "Attack #{state.player_weapons[0].attack_cooldown_max.to_i}"
+    outputs.debug << "Attack #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
   end
 
   def player_get_next_xp_level current_level
@@ -1001,7 +1034,7 @@ class State_CurveTest
   end
 
   def tick
-    draw_curve args, Player_Attack_Cooldown_Curve, 10, 10, [128, 43, 67]
+    draw_curve args, Player_Fist_Attack_Cooldown_Curve, 10, 10, [128, 43, 67]
   end
 
   # Evaluate the curve and draw it
