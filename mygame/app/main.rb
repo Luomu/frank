@@ -232,8 +232,85 @@ class FrankFist < Weapon
   end
 end
 
+# Flies in parabolic arc
+# Creates a zone of acid on ground, that enemies avoid
 class AcidFlask < Weapon
+  def initialize
+    @attack_cooldown     = 50
+    @attack_cooldown_max = @attack_cooldown
+    @projectiles = []
+    @acid_pools  = []
+    @side = 1
+  end
+
   def tick args
+    @attack_cooldown -= 1
+    if @attack_cooldown <= 0
+      # Spawn ye flask that flies in a curved arc
+      target_cell = args.state.world.get_random_cell_on_screen
+      target_loc  = args.state.world.coord_to_cell_center target_cell.x, target_cell.y
+      start_x = args.state.player.x
+      @side   = @side > 0 ? -1 : 1
+      end_x   = target_loc.x
+      start_y = args.state.player.y + 60
+      end_y   = target_loc.y
+
+      mid_x = (start_x + end_x) / 2
+      mid_y = ((start_y + end_y) / 2) + 220
+      
+      projectile = AcidFlaskProjectile.new(start_x, start_y)
+      projectile.life = 100
+      projectile.curve = {
+        x: Curve.new(:ease_out_sine,
+        [
+          [0.0, start_x],
+          #[0.5, mid_x],
+          [1.0, end_x],
+        ]),
+        y: Curve.new(:ease_in_sine,
+        [
+          [0.0,  start_y],
+          [0.5,  mid_y],
+          [1.0,  end_y],
+        ])
+      }
+      args.state.fx << projectile # Using FX array to render as these don't interact and will appear on top
+      @projectiles  << projectile # Array for local logic
+      @attack_cooldown = @attack_cooldown_max
+    end
+
+    world = args.state.world
+    @projectiles.each do |flask|
+      flask.life -= 1
+      time = 1.0 - (flask.life / 100.0)
+      new_x = flask.curve.x.evaluate(time)
+      new_y = flask.curve.y.evaluate(time)
+      flask.x = new_x
+      flask.y = new_y
+
+      if flask.is_finished?
+        flask_loc = world.world_to_coord flask.x, flask.y
+        # Mark location impassable (may already have an obstacle)
+        world.cost_field[world.coord_to_index(flask_loc.x,flask_loc.y)] += 1
+
+        # Spawn acid pool/cloud/whatever
+        cell_center = world.coord_to_cell_center flask_loc.x, flask_loc.y
+        acid_pool = EntityFactory::make_fx_acid_pool(cell_center.x, cell_center.y, flask_loc)
+        args.state.fx << acid_pool # for rendering
+        @acid_pools << acid_pool
+      end
+    end
+    @projectiles.reject! {|flask| flask.is_finished?}
+
+    # Update acid pools
+    @acid_pools.each do |pool|
+      pool.life -= 1
+      if pool.is_finished?
+        # Free up location
+        world.cost_field[world.coord_to_index(pool.location.x, pool.location.y)] -= 1
+      end
+    end
+    @acid_pools.reject! {|pool| pool.is_finished?}
   end
 end
 
@@ -380,6 +457,58 @@ class HealEffect < Effect
   end
 end
 
+class AcidFlaskProjectile < Effect
+  attr_accessor :curve
+  def initialize x,y
+    super x,y
+    @life = 20
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @path = 'sprites/pickups.png'
+    @a = 255
+    @w = 32
+    @h = 32
+    @tile_x = 32
+    @tile_w = 32
+    @tile_h = 32
+    @curve  = nil # set by AcidFlask
+  end
+
+  def tick
+    # Managed by the weapon class
+  end
+end # AcidFlaskProjectile
+
+# Damaging area that temporarily affects enemy movement
+class AcidPool < Effect
+  attr_reader :location
+
+  def initialize x,y,location
+    super x,y
+    @life = 28.seconds
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @path = 'sprites/acid-cloud.png'
+    @a = 255
+    @w = CELL_SIZE
+    @h = CELL_SIZE
+    @tile_x = 0
+    @tile_y = 0
+    @tile_w = 32
+    @tile_h = 32
+    @location = location
+    @anim_frame
+  end
+
+  AcidFrames = [0, 32, 64]
+  def tick
+    # Again, we let the weapon control the lifetime of this item (keeps logic in one place)
+    # Presentation here
+    frame_index = 0.frame_index 3, 20, true
+    @tile_x = AcidFrames[frame_index]
+  end
+end
+
 module EntityFactory
   def self.make_player
     {
@@ -444,6 +573,10 @@ module EntityFactory
   def self.make_fx_heal xpos, ypos
     HealEffect.new(xpos, ypos)
   end
+
+  def self.make_fx_acid_pool xpos, ypos, location
+    AcidPool.new(xpos, ypos, location)
+  end
 end # module EntityFactory
 
 # Running the game logic
@@ -468,7 +601,7 @@ class State_Gameplay
     state.score          = 0
     state.xp             = 0
     state.next_xp_level  = player_get_next_xp_level state.player_level
-    state.player_weapons = [ FrankFist.new ]
+    state.player_weapons = [ FrankFist.new, AcidFlask.new ]
 
     # Position player
     ploc = state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
@@ -818,6 +951,7 @@ class WorldGrid
   attr_accessor :goal_location
   attr_reader   :vector_field
   attr_reader   :distance_field
+  attr_reader   :cost_field
 
   def initialize args, dimension, cell_size
     @args = args
@@ -966,8 +1100,23 @@ class WorldGrid
     end
   end
 
+  def get_random_cell
+    {
+      x: rand(@width),
+      y: rand(@height)
+    }
+  end
+
+  def get_random_cell_on_screen
+    {
+      x: rand(32),
+      y: rand(18)
+    }
+  end
+
   def tick
-    return if @prev_location == @goal_location
+    # Todo add dirty flag
+    #return if (@prev_location == @goal_location)
     @prev_location == @goal_location
     # Todo: Don't calculate this, if the position is the same
     # Split the calculation over multiple frames to reduce the load
