@@ -93,6 +93,12 @@ class Curve
           p = 1 + m * m * m * 4;
         end
         return lerp(@frames[start_idx].value, @frames[end_idx].value, p)
+      elsif @mode == :ease_in_sine
+        p = 1 - Math.cos((y * Math::PI) / 2);
+        return lerp(@frames[start_idx].value, @frames[end_idx].value, p)
+      elsif @mode == :ease_out_sine
+        p = Math.sin((y * Math::PI) / 2);
+        return lerp(@frames[start_idx].value, @frames[end_idx].value, p)
       else
         return lerp(@frames[start_idx].value, @frames[end_idx].value, y)
       end
