@@ -293,7 +293,7 @@ class AcidFlask < Weapon
       if flask.is_finished?
         flask_loc = world.world_to_coord flask.x, flask.y
         # Mark location impassable (may already have an obstacle)
-        world.cost_field[world.coord_to_index(flask_loc.x,flask_loc.y)] += 1
+        world.cost_field[world.coord_to_index(flask_loc.x,flask_loc.y)] += 2
 
         # Spawn acid pool/cloud/whatever
         cell_center = world.coord_to_cell_center flask_loc.x, flask_loc.y
@@ -309,7 +309,7 @@ class AcidFlask < Weapon
       pool.life -= 1
       if pool.is_finished?
         # Free up location
-        world.cost_field[world.coord_to_index(pool.location.x, pool.location.y)] -= 1
+        world.cost_field[world.coord_to_index(pool.location.x, pool.location.y)] -= 2
       end
     end
     @acid_pools.reject! {|pool| pool.is_finished?}
@@ -750,6 +750,10 @@ class State_Gameplay
       if state.world.cost_field[current_idx] > 0
         cell_center = state.world.coord_to_cell_center current_loc.x, current_loc.y
         deflect_enemy_from_point enemy, cell_center, dt
+        # Damage from damage zones (shouldn't do here but running out of time :)
+        if state.world.cost_field[current_idx] > 1
+          enemy.health -= 1
+        end
       # Check if the enemy should steer directly towards the player (at 0 distance, or outside play area)
       elsif state.world.outside_world? current_loc
         dir_steer = true
