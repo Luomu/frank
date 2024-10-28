@@ -3,14 +3,9 @@
 # Survive as long as you can
 #
 # TODO:
-# - Collect bolts to level up and attack faster & stronger
 # - Collect electricity to heal
-# - More optimized collision between enemies
-# - Scrolling
 # - Obstacles
 # - Perf: refactor sprites to use classes
-# - Probably need a Weapon class for better attack control
-# - Weapon 2: Throw a flask that creates fire (?) that marks the area as an obstacle!
 
 require 'app/curves.rb'
 
@@ -395,7 +390,7 @@ class HealthPickup < Pickup
   def pick_up state
     super state
     state.player.health = state.player.health_max
-    state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
+    state.fx << EntityFactory::make_fx_heal(state.player.x, state.player.y)
   end
 end
 
@@ -709,6 +704,32 @@ class State_Gameplay
     end
   end
 
+  # Used to bounce enemies off walls
+  # Copy of the enemy to enemy collision code
+  def deflect_enemy_from_point enemy, point, dt
+    o_1_center_x = enemy.x
+    o_1_center_y = enemy.y
+    o_2_center_x = point.x
+    o_2_center_y = point.y
+
+    o_2_radius = 24
+
+    distance_x = o_1_center_x - o_2_center_x
+    distance_y = o_1_center_y - o_2_center_y
+    distance = Math.sqrt(distance_x * distance_x + distance_y * distance_y)
+
+    if distance < enemy.radius + o_2_radius
+      v_x = (o_2_center_x - o_1_center_x) / distance
+      v_y = (o_2_center_y - o_1_center_y) / distance
+      delta = enemy.radius + o_2_radius - distance
+
+      o_1_dx = -0.75 * dt * delta * v_x * 0.5
+      o_1_dy = -0.75 * dt * delta * v_y * 0.5
+      enemy.x += o_1_dx
+      enemy.y += o_1_dy
+    end
+  end
+
   def move_enemies
     dt = 0.5
     state.enemies.each do |enemy|
@@ -718,9 +739,12 @@ class State_Gameplay
       enemy.tile_x = (current_idx % 2 == 0) ? 0 : ENEMY_SPRITE_WIDTH # 2 frame animation
       move_dir    = DirectionLookupNormalized[state.world.vector_field[current_idx]]
 
+      # Inside obstacles? Deflect away
+      if state.world.cost_field[current_idx] > 0
+        cell_center = state.world.coord_to_cell_center current_loc.x, current_loc.y
+        deflect_enemy_from_point enemy, cell_center, dt
       # Check if the enemy should steer directly towards the player (at 0 distance, or outside play area)
-      # note: they could also be inside walls
-      if state.world.outside_world? current_loc
+      elsif state.world.outside_world? current_loc
         dir_steer = true
       elsif state.world.distance_field[current_idx] <= 0
         dir_steer = true
@@ -820,6 +844,7 @@ class State_Gameplay
     end
 
     # Update attack fx
+    # todo move inside fist weapon
     state.player_attacks.each do |attack|
       attack.x = attack.xoffs + state.player.x
       attack.y = attack.yoffs + state.player.y
