@@ -105,6 +105,13 @@ def vec2_angle_between a,b
   Math.atan2(vec2_cross(a,b), Geometry::vec2_dot_product(a,b))
 end
 
+def round_up number, multiple
+  return number if multiple == 0
+  remainder = number % multiple
+  return number if remainder == 0
+  number + multiple - remainder
+end
+
 def tick args
   # Initialize/reinitialize
   if !args.state.initialized
@@ -644,7 +651,7 @@ class State_Gameplay
   def player_get_next_xp_level current_level
     next_level = current_level + 1
     if next_level < MAX_LEVEL
-      (next_level**2 / 0.08).floor
+      round_up((next_level**2 / 0.5).floor, 10)
     else
       0
     end
