@@ -254,22 +254,22 @@ class AcidFlask < Weapon
       start_x = args.state.player.x
       @side   = @side > 0 ? -1 : 1
       end_x   = target_loc.x
-      start_y = args.state.player.y + 60
+      start_y = args.state.player.y + 20
       end_y   = target_loc.y
 
       mid_x = (start_x + end_x) / 2
-      mid_y = ((start_y + end_y) / 2) + 220
+      mid_y = start_y + 200#((start_y + end_y) / 2) + 420
       
       projectile = AcidFlaskProjectile.new(start_x, start_y)
       projectile.life = 100
       projectile.curve = {
-        x: Curve.new(:ease_out_sine,
+        x: Curve.new(:linear,
         [
           [0.0, start_x],
           #[0.5, mid_x],
           [1.0, end_x],
         ]),
-        y: Curve.new(:ease_in_sine,
+        y: Curve.new(:linear,
         [
           [0.0,  start_y],
           [0.5,  mid_y],
@@ -284,9 +284,10 @@ class AcidFlask < Weapon
     world = args.state.world
     @projectiles.each do |flask|
       flask.life -= 1
-      time = 1.0 - (flask.life / 100.0)
-      new_x = flask.curve.x.evaluate(time)
-      new_y = flask.curve.y.evaluate(time)
+      time = flask.life.fdiv(100.0)
+      p = time * (1.0 - time)
+      new_x = flask.curve.x.evaluate(1.0-time)
+      new_y = flask.curve.y.evaluate(p)
       flask.x = new_x
       flask.y = new_y
 
