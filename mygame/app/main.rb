@@ -446,16 +446,21 @@ class HealEffect < Effect
     @life = 20
     @anchor_x = 0.5
     @anchor_y = 0.5
-    @path = 'sprites/text-level-up.png' # needs text!
     @a = 255
-    @w = 103
-    @h = 33
+    @w = 32
+    @h = 32
+    @path   = 'sprites/pickups.png'
+    @tile_x = 32
+    @tile_y = 0
+    @tile_w = 32
+    @tile_h = 32
   end
 
   def tick
     super
-    @a = (@a - 10).greater(0)
-    @y += 1
+    @a = (@a - 5).greater(0)
+    @w += 2
+    @h += 2
   end
 end
 
