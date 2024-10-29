@@ -578,6 +578,8 @@ module EntityFactory
       a: 255,
       w: 30,
       h: 50,
+      tile_w: 32,
+      tile_h: 64,
       scale: 1.0,
       life:  20,
     }
