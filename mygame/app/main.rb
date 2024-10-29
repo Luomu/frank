@@ -285,9 +285,6 @@ class AcidFlask < Weapon
       end_x   = target_loc.x
       start_y = args.state.player.y + 20
       end_y   = target_loc.y
-
-      mid_x = (start_x + end_x) / 2
-      mid_y = start_y + 200#((start_y + end_y) / 2) + 420
       
       projectile = AcidFlaskProjectile.new(start_x, start_y)
       projectile.life = 100
@@ -295,13 +292,11 @@ class AcidFlask < Weapon
         x: Curve.new(:linear,
         [
           [0.0, start_x],
-          #[0.5, mid_x],
           [1.0, end_x],
         ]),
         y: Curve.new(:linear,
         [
           [0.0,  start_y],
-          [0.5,  mid_y],
           [1.0,  end_y],
         ])
       }
@@ -316,7 +311,7 @@ class AcidFlask < Weapon
       time = flask.life.fdiv(100.0)
       p = time * (1.0 - time)
       new_x = flask.curve.x.evaluate(1.0-time)
-      new_y = flask.curve.y.evaluate(p)
+      new_y = flask.curve.y.evaluate(1.0-time) + p * 400
       flask.x = new_x
       flask.y = new_y
 
@@ -493,13 +488,14 @@ class AcidFlaskProjectile < Effect
     @life = 20
     @anchor_x = 0.5
     @anchor_y = 0.5
-    @path = 'sprites/pickups.png'
+    @path = 'sprites/player-attacks.png'
     @a = 255
     @w = 32
     @h = 32
     @tile_x = 32
     @tile_w = 32
     @tile_h = 32
+    @angle  = rand(360)
     @curve  = nil # set by AcidFlask
   end
 
