@@ -4,8 +4,9 @@
 #
 # TODO:
 # - Collect electricity to heal
-# - Obstacles
+# - Visible obstacles
 # - Perf: refactor sprites to use classes
+# - Game over sequence
 
 require 'app/curves.rb'
 
@@ -707,13 +708,12 @@ class State_Gameplay
     end
   end
 
-  # XP, health or nothing
+  # Spawn XP drops
   def spawn_pickup enemy
-    if (state.player.health / state.player.health_max) < 0.9
-      state.pickups << EntityFactory.make_health_pickup(enemy.x,enemy.y)
-    else
-      state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
+    while state.pickups.length > 400
+      state.pickups.shift
     end
+    state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
   end
   
   # Collide enemies with player (they die in 1 hit and damage player)
