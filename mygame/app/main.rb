@@ -245,6 +245,35 @@ class AcidFlask < Weapon
     @side = 1
   end
 
+  def get_pattern loc
+    if rand > 0.5
+      return [{x: loc.x, y: loc.y + 1}, loc, {x: loc.x, y: loc.y - 1}]
+    else
+      return [{x: loc.x - 1, y: loc.y}, loc, {x: loc.x + 1, y: loc.y}]
+    end
+  end
+
+  def put_acid_pool loc, args, world
+    return if world.outside_world? loc
+    # Mark location impassable (may already have an obstacle)
+    world.cost_field[world.coord_to_index(loc.x,loc.y)] += 2
+
+    cell_center = world.coord_to_cell_center loc.x, loc.y
+    acid_pool = EntityFactory::make_fx_acid_pool(cell_center.x, cell_center.y, loc)
+    args.state.fx << acid_pool # for rendering
+    @acid_pools << acid_pool
+  end
+
+  # Create an interesting shape to block enemies
+  def explode flask, args, world
+    flask_loc = world.world_to_coord flask.x, flask.y
+
+    # Spawn acid pool/cloud/whatever
+    shape = get_pattern flask_loc
+    shape.each {|loc| put_acid_pool(loc, args, world) }
+    world.set_dirty
+  end
+
   def tick args
     @attack_cooldown -= 1
     if @attack_cooldown <= 0
@@ -292,15 +321,7 @@ class AcidFlask < Weapon
       flask.y = new_y
 
       if flask.is_finished?
-        flask_loc = world.world_to_coord flask.x, flask.y
-        # Mark location impassable (may already have an obstacle)
-        world.cost_field[world.coord_to_index(flask_loc.x,flask_loc.y)] += 2
-
-        # Spawn acid pool/cloud/whatever
-        cell_center = world.coord_to_cell_center flask_loc.x, flask_loc.y
-        acid_pool = EntityFactory::make_fx_acid_pool(cell_center.x, cell_center.y, flask_loc)
-        args.state.fx << acid_pool # for rendering
-        @acid_pools << acid_pool
+        explode flask, args, world
       end
     end
     @projectiles.reject! {|flask| flask.is_finished?}
@@ -1183,6 +1204,10 @@ class WorldGrid
       x: rand(32),
       y: rand(18)
     }
+  end
+
+  def set_dirty
+    @dirty = true
   end
 
   def tick
