@@ -593,6 +593,7 @@ class State_Gameplay
   attr_accessor :pickups
 
   def initialize args
+    Kernel.srand
     self.args = args
     state.player         = EntityFactory::make_player
     state.enemies        = []
@@ -614,6 +615,8 @@ class State_Gameplay
     # Position player
     ploc = state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
     state.player.x, state.player.y = ploc.x, ploc.y
+
+    create_background
   end
 
   def tick
@@ -633,13 +636,14 @@ class State_Gameplay
       args.state.current_state = State_Gameover.new args
     end
 
-    args.outputs.background_color = [40,45,35]
+    args.outputs.background_color = [50,60,57] #blue-greenish
 
     # Render world
     #state.world.render_grid_lines
     state.world.render_distance_field if $debug_show_grid
 
     # Render characters
+    args.outputs.sprites << [@bg_sprites]
     args.outputs.sprites << [state.pickups, state.dead_enemies, state.enemies, state.player]
     args.outputs.sprites << [state.fx, state.player_attacks]
 
@@ -945,6 +949,31 @@ class State_Gameplay
   
   def give_score amount
     state.score += amount
+  end
+
+  def create_background
+    @bg_sprites = []
+    for row in 0..17 do
+      for col in 0..31 do
+        if rand > 0.75
+          xpos = col * CELL_SIZE
+          ypos = row * CELL_SIZE
+          tile_x = [0,32,64].sample
+          tile_y = [0,32,64].sample
+          @bg_sprites << args.state.new_entity_strict(:grass,
+            x: xpos,
+            y: ypos,
+            w: CELL_SIZE,
+            h: CELL_SIZE,
+            tile_x: tile_x,
+            tile_y: tile_y,
+            tile_w: 32,
+            tile_h: 32,
+            path: 'sprites/bg-grass.png'
+          )
+        end
+      end
+    end
   end
 
   def debug_render_collision_rects
