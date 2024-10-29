@@ -362,7 +362,7 @@ class Enemy
     @tile_w = ENEMY_SPRITE_WIDTH
     @tile_h = ENEMY_SPRITE_HEIGHT
     @flip_horizontally = flip
-    @health = 1
+    @health = 2
     @a = 255
 
   end
