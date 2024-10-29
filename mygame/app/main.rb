@@ -242,7 +242,6 @@ class AcidFlask < Weapon
     @attack_cooldown     = 50
     @attack_cooldown_max = @attack_cooldown
     @projectiles = []
-    @acid_pools  = []
     @side = 1
   end
 
@@ -261,8 +260,7 @@ class AcidFlask < Weapon
 
     cell_center = world.coord_to_cell_center loc.x, loc.y
     acid_pool = EntityFactory::make_fx_acid_pool(cell_center.x, cell_center.y, loc)
-    args.state.fx << acid_pool # for rendering
-    @acid_pools << acid_pool
+    args.state.acid_pools << acid_pool # for rendering
   end
 
   # Create an interesting shape to block enemies
@@ -323,14 +321,14 @@ class AcidFlask < Weapon
     @projectiles.reject! {|flask| flask.is_finished?}
 
     # Update acid pools
-    @acid_pools.each do |pool|
+    args.state.acid_pools.each do |pool|
       pool.life -= 1
       if pool.is_finished?
         # Free up location
         world.cost_field[world.coord_to_index(pool.location.x, pool.location.y)] -= 2
       end
     end
-    @acid_pools.reject! {|pool| pool.is_finished?}
+    args.state.acid_pools.reject! {|pool| pool.is_finished?}
   end
 end
 
@@ -515,7 +513,7 @@ class AcidPool < Effect
     @anchor_x = 0.5
     @anchor_y = 0.5
     @path = 'sprites/acid-cloud.png'
-    @a = 255
+    @a = 200
     @w = CELL_SIZE
     @h = CELL_SIZE
     @tile_x = 0
@@ -617,6 +615,7 @@ class State_Gameplay
     self.args = args
     state.player         = EntityFactory::make_player
     state.enemies        = []
+    state.acid_pools     = [] # could be aoe attacks - need to render below characters
     state.player_attacks = []
     state.fx             = []
     state.pickups        = []
@@ -663,7 +662,7 @@ class State_Gameplay
     state.world.render_distance_field if $debug_show_grid
 
     # Render characters
-    args.outputs.sprites << [@bg_sprites]
+    args.outputs.sprites << [@bg_sprites, state.acid_pools]
     args.outputs.sprites << [state.pickups, state.dead_enemies, state.enemies, state.player]
     args.outputs.sprites << [state.fx, state.player_attacks]
 
