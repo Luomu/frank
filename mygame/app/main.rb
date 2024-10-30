@@ -49,6 +49,13 @@ Player_Fist_Sub_Attack_Cooldown_Curve = Curve.new(:linear,
   ]
 )
 
+Player_Acid_Attack_Cooldown_Curve = Curve.new(:linear,
+  [
+    [1,   120],
+    [100, 20]
+  ]
+)
+
 module Cheats
   ENABLED = true
   GODMODE = false
@@ -161,6 +168,7 @@ end
 # Thing that hurts enemies
 # Weapon 1: Punches (leveling up increases count and directions)
 # Weapon 2: Potion (creates acid that damages enemies and marks an area as obstacle)
+# Weapon 3: Electric spark that fires in 8 directions
 class Weapon
   attr_accessor :attack_cooldown
   attr_accessor :attack_cooldown_max
@@ -239,10 +247,14 @@ end
 # Creates a zone of acid on ground, that enemies avoid
 class AcidFlask < Weapon
   def initialize
-    @attack_cooldown     = 50
+    @attack_cooldown     = Player_Acid_Attack_Cooldown_Curve.evaluate(1)
     @attack_cooldown_max = @attack_cooldown
     @projectiles = []
     @side = 1
+  end
+
+  def level_up new_level
+    @attack_cooldown_max = Player_Acid_Attack_Cooldown_Curve.evaluate(new_level)
   end
 
   def get_pattern loc
@@ -273,11 +285,18 @@ class AcidFlask < Weapon
     world.set_dirty
   end
 
+  def get_random_cell
+    {
+      x: rand(30) + 1,
+      y: rand(16) + 1
+    }
+  end
+
   def tick args
     @attack_cooldown -= 1
     if @attack_cooldown <= 0
       # Spawn ye flask that flies in a curved arc
-      target_cell = args.state.world.get_random_cell_on_screen
+      target_cell = get_random_cell
       target_loc  = args.state.world.coord_to_cell_center target_cell.x, target_cell.y
       start_x = args.state.player.x
       @side   = @side > 0 ? -1 : 1
@@ -322,6 +341,7 @@ class AcidFlask < Weapon
 
     # Update acid pools
     args.state.acid_pools.each do |pool|
+      pool.tick
       pool.life -= 1
       if pool.is_finished?
         # Free up location
@@ -674,7 +694,8 @@ class State_Gameplay
     outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
     outputs.debug << "HP #{state.player.health.to_i}"
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
-    outputs.debug << "Attack #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
+    outputs.debug << "Attack 1 #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
+    outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
   end
 
   def player_get_next_xp_level current_level
