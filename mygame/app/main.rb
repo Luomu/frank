@@ -159,6 +159,12 @@ def tick args
     if args.inputs.keyboard.key_down.p
       $debug_show_grid = !$debug_show_grid
     end
+
+    #if args.inputs.keyboard.key_down.h
+    #  1000.times {
+    #    args.state.current_state.spawn_health_pickup
+    #  }
+    #end
   end
 
   # Debug stats
@@ -434,6 +440,7 @@ class HealthPickup < Pickup
     super state
     state.player.health = state.player.health_max
     state.fx << EntityFactory::make_fx_heal(state.player.x, state.player.y)
+    state.active_health_pickups -= 1
   end
 end
 
@@ -650,6 +657,7 @@ class State_Gameplay
     state.xp             = 0
     state.next_xp_level  = player_get_next_xp_level state.player_level
     state.player_weapons = [ FrankFist.new, AcidFlask.new ]
+    state.active_health_pickups = 0
 
     # Position player
     ploc = state.world.coord_to_cell_center PLAYER_START.x, PLAYER_START.y
@@ -734,6 +742,18 @@ class State_Gameplay
       state.pickups.shift
     end
     state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
+  end
+
+  # Spawn a health object in random location around grid center
+  def spawn_health_pickup
+    cell =
+    {
+      x: rand(22) + 5,
+      y: rand(10) + 4
+    }
+    coord = state.world.coord_to_cell_center cell.x, cell.y
+    state.pickups << EntityFactory.make_health_pickup(coord.x, coord.y)
+    state.active_health_pickups += 1
   end
   
   # Collide enemies with player (they die in 1 hit and damage player)
@@ -901,6 +921,11 @@ class State_Gameplay
     # Attack
     state.player_weapons.each do |wpn|
       wpn.tick args
+    end
+
+    # Spawn health pickups when low
+    if state.player.health < 5 and state.active_health_pickups < 1
+      spawn_health_pickup
     end
 
     # Update attack fx
