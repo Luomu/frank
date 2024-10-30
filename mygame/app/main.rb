@@ -1084,22 +1084,6 @@ class WorldGrid
 
     # Walls
     @cost_field = Array.new(@width * @height, 0)
-
-    set_impassable 10,13
-    set_impassable 11,13
-    set_impassable 12,13
-
-    set_impassable 20,5
-    set_impassable 20,6
-    set_impassable 20,7
-    set_impassable 21,5
-    set_impassable 21,6
-    set_impassable 21,7
-
-    set_impassable 2,6
-    set_impassable 3,6
-    set_impassable 4,6
-    set_impassable 5,6
   end
 
   def set_impassable x,y
