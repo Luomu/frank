@@ -129,6 +129,26 @@ def any_key_pressed? args
   args.inputs.keyboard.active || args.inputs.controller_one.active
 end
 
+class Sounds
+  def self.play_music args
+    args.audio[:track_1] = {
+      input: "sounds/music-stage1.ogg",
+      gain: 0.0,
+      looping: true
+    }
+  end
+
+  def self.stop_music args
+    args.audio[:track_1] = nil
+  end
+
+  def self.fade_in_music args
+    if args.audio[:track_1].gain < 1.0
+      args.audio[:track_1].gain += 0.001
+    end
+  end
+end
+
 # Main loop
 def tick args
   # Initialize/reinitialize
@@ -644,7 +664,7 @@ class State_TitleScreen
   def initialize args
     self.args   = args
     @start_time = Kernel.tick_count
-    args.audio[:track_1] = nil
+    Sounds.stop_music args
   end
 
   def tick
@@ -722,19 +742,11 @@ class State_Gameplay
 
     create_background
 
-    # Music
-    args.audio[:track_1] = {
-      input: "sounds/music-stage1.ogg",
-      gain: 0.0,
-      looping: true
-    }
+    Sounds.play_music args
   end
 
   def tick
-    # Fade in music
-    if args.audio[:track_1].gain < 1.0
-      args.audio[:track_1].gain += 0.001
-    end
+    Sounds.fade_in_music args
 
     args.state.seconds_survived = args.state.start_time.elapsed_time.idiv(60)
 
@@ -1132,7 +1144,7 @@ class State_Gameover
   def initialize args
     self.args   = args
     @start_time = Kernel.tick_count
-    args.audio[:track_1] = nil
+    Sounds.stop_music args
   end
 
   def tick
