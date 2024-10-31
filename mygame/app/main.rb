@@ -32,6 +32,8 @@ PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
 # Weapon balancing data
+ACID_POOL_LIFETIME = 20.seconds
+
 # Fist attack cooldown, in ticks
 Player_Fist_Attack_Cooldown_Curve = Curve.new(:linear,
   [
@@ -51,7 +53,7 @@ Player_Fist_Sub_Attack_Cooldown_Curve = Curve.new(:linear,
 
 Player_Acid_Attack_Cooldown_Curve = Curve.new(:linear,
   [
-    [1,   120],
+    [1,   180],
     [100, 20]
   ]
 )
@@ -536,7 +538,7 @@ class AcidPool < Effect
 
   def initialize x,y,location
     super x,y
-    @life = 28.seconds
+    @life     = ACID_POOL_LIFETIME
     @anchor_x = 0.5
     @anchor_y = 0.5
     @path = 'sprites/acid-cloud.png'
@@ -704,7 +706,7 @@ class State_Gameplay
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
     outputs.debug << "Attack 1 #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
     if state.player_weapons.length > 1
-    outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
+      outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
     end
   end
 
