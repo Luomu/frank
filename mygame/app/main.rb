@@ -3,10 +3,10 @@
 # Survive as long as you can
 #
 # TODO:
-# - Collect electricity to heal
-# - Visible obstacles
-# - Perf: refactor sprites to use classes
 # - Game over sequence
+# - Weapon 3: Lighting bolt on level 3
+# - Splash screen with instructions
+# - Tease weapons on hud
 
 require 'app/curves.rb'
 
@@ -17,7 +17,7 @@ ENEMY_MOVE_SPEED  = 0.1
 ENEMY_DRAG        = 0.75
 SCORE_PER_KILL    = 10
 XP_PICKUP_VALUE   = 1
-MAX_LEVEL = 100
+MAX_LEVEL         = 100
 
 GRID_DIMENSION    = 32
 CELL_SIZE         = 40
@@ -656,7 +656,7 @@ class State_Gameplay
     state.score          = 0
     state.xp             = 0
     state.next_xp_level  = player_get_next_xp_level state.player_level
-    state.player_weapons = [ FrankFist.new, AcidFlask.new ]
+    state.player_weapons = [ FrankFist.new ]
     state.active_health_pickups = 0
 
     # Position player
@@ -703,7 +703,9 @@ class State_Gameplay
     outputs.debug << "HP #{state.player.health.to_i}"
     outputs.debug << "Pickups #{state.pickups.length.to_i}"
     outputs.debug << "Attack 1 #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
+    if state.player_weapons.length > 1
     outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
+    end
   end
 
   def player_get_next_xp_level current_level
@@ -719,6 +721,11 @@ class State_Gameplay
     state.player_level += 1
     state.xp -= state.xp
     state.next_xp_level = player_get_next_xp_level state.player_level
+
+    # Unlock weapons
+    if state.player_level == 2
+      state.player_weapons << AcidFlask.new
+    end
 
     # Improve weapons
     state.player_weapons.each { |w| w.level_up state.player_level }
