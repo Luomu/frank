@@ -6,7 +6,10 @@
 # - Game over sequence
 # - Weapon 3: Lighting bolt on level 3
 # - Splash screen with instructions
+# - Game over screen
 # - Tease weapons on hud
+# - Test controller
+# - Mouse control?
 
 require 'app/curves.rb'
 
@@ -122,6 +125,11 @@ def round_up number, multiple
   number + multiple - remainder
 end
 
+def any_key_pressed? args
+  args.inputs.keyboard.active || args.inputs.controller_one.active
+end
+
+# Main loop
 def tick args
   # Initialize/reinitialize
   if !args.state.initialized
@@ -130,15 +138,6 @@ def tick args
     # Used to visualize lvl up curves
     #args.state.current_state = State_CurveTest.new args
     args.state.initialized = true
-    args.audio[:track_1] = {
-      input: "sounds/music-stage1.ogg",
-      gain: 0.0,
-      looping: true
-    }
-  end
-
-  if args.audio[:track_1].gain < 1.0
-    args.audio[:track_1].gain += 0.001
   end
 
   # Execute current game state (menu, gameplay or gameover)
@@ -160,6 +159,10 @@ def tick args
 
     if args.inputs.keyboard.key_down.p
       $debug_show_grid = !$debug_show_grid
+    end
+
+    if args.inputs.keyboard.key_down.o
+      args.state.player.health = 0
     end
 
     #if args.inputs.keyboard.key_down.h
@@ -634,6 +637,58 @@ module EntityFactory
   end
 end # module EntityFactory
 
+# Splash image + quick help
+class State_TitleScreen
+  attr_gtk
+
+  def initialize args
+    self.args   = args
+    @start_time = Kernel.tick_count
+    args.audio[:track_1] = nil
+  end
+
+  def tick
+    # Start game
+    if @start_time.elapsed_time > 30 and any_key_pressed? args
+      args.state.current_state = State_Gameplay.new args
+    end
+
+    args.outputs.background_color = [0,0,0]
+    args.outputs.sprites << {
+      path: 'sprites/img-splash-frank.png',
+      anchor_x: 0.5,
+      anchor_y: 0.5,
+      x: 640,
+      y: 230,
+      w: 400,
+      h: 265
+    }
+
+    args.outputs.labels << {
+      anchor_x: 0.5,
+      x: 640,
+      y: 80.from_top,
+      size_enum: 4,
+      text: "Frankenstein Survivor",
+      r: 255,
+      g: 255,
+      b: 255
+    }    
+
+    if @start_time.elapsed_time > 30
+      args.outputs.labels << {
+        anchor_x: 0.5,
+        x: 640,
+        y: 80,
+        text: "Press a key to start",
+        r: 255,
+        g: 255,
+        b: 255
+      }
+    end
+  end
+end
+
 # Running the game logic
 class State_Gameplay
   attr_gtk
@@ -666,9 +721,21 @@ class State_Gameplay
     state.player.x, state.player.y = ploc.x, ploc.y
 
     create_background
+
+    # Music
+    args.audio[:track_1] = {
+      input: "sounds/music-stage1.ogg",
+      gain: 0.0,
+      looping: true
+    }
   end
 
   def tick
+    # Fade in music
+    if args.audio[:track_1].gain < 1.0
+      args.audio[:track_1].gain += 0.001
+    end
+
     args.state.seconds_survived = args.state.start_time.elapsed_time.idiv(60)
 
     plr_loc = state.world.world_to_coord state.player.x, state.player.y
@@ -1063,7 +1130,9 @@ class State_Gameover
   attr_gtk
 
   def initialize args
-    self.args = args
+    self.args   = args
+    @start_time = Kernel.tick_count
+    args.audio[:track_1] = nil
   end
 
   def tick
@@ -1076,11 +1145,18 @@ class State_Gameover
       alignment_enum: 1,
       text: "GAME OVER, YOU SURVIVED #{minutes}m #{seconds}s"
     }
-    outputs.labels << { x: 640, y: 240.from_top,
-      r: 255, g: 255, b: 49, size_enum: 1,
-      alignment_enum: 1,
-      text: "HIT R TO RESTART"
-    }
+
+    if @start_time.elapsed_time > 60
+      outputs.labels << { x: 640, y: 240.from_top,
+        r: 255, g: 255, b: 49, size_enum: 1,
+        alignment_enum: 1,
+          text: "Press a key to continue"
+      }
+
+      if any_key_pressed? args
+        args.state.current_state = State_TitleScreen.new args
+      end
+    end
   end
 end
 
