@@ -1219,6 +1219,28 @@ class State_Gameplay
       alignment_enum: 2,
       text: "Score: #{args.state.score}"
     }
+
+    # Weapon status display
+    args.outputs.sprites << {
+      x: 180, y: 90.from_top,
+      r: 255, g: 255, b: 255,
+      w: 96,
+      h: 32,
+      tile_y: 32,
+      tile_w: 96,
+      tile_h: 32,
+      path: 'sprites/hud.png'
+    }
+    wpns_width = args.state.player_weapons.length * 32
+    args.outputs.sprites << {
+      x: 180, y: 90.from_top,
+      r: 255, g: 255, b: 255,
+      w: wpns_width,
+      h: 32,
+      tile_w: wpns_width,
+      tile_h: 32,
+      path: 'sprites/hud.png'
+    }
   end
   
   def give_score amount
