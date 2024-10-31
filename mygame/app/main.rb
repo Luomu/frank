@@ -5,7 +5,6 @@
 # TODO:
 # - Weapon 3: Lighting bolt on level 3 (goes in reverse through flowfield?)
 # - Splash screen with instructions
-# - Game over screen
 # - Tease weapons on hud
 # - Test controller
 # - Mouse control?
@@ -37,6 +36,8 @@ PLAYER_SPRITE_HEIGHT = 48
 PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
 # Weapon balancing data
+ACID_WEAPON_UNLOCK_LEVEL     = 2
+ELECTRIC_WEAPON_UNLOCK_LEVEL = 5
 ACID_POOL_LIFETIME = 20.seconds
 
 # Fist attack cooldown, in ticks
@@ -63,8 +64,15 @@ Player_Acid_Attack_Cooldown_Curve = Curve.new(:linear,
   ]
 )
 
+Player_Electric_Attack_Cooldown_Curve = Curve.new(:linear,
+  [
+    [1,   60],
+    [100, 20]
+  ]
+)
+
 module Cheats
-  ENABLED = true
+  ENABLED = true #!$gtk.production
   GODMODE = false
 end
 
@@ -211,8 +219,8 @@ class Weapon
   attr_accessor :attack_cooldown_max
 
   def initialize
-    @attack_cooldown = 0
-    @attack_cooldown = 0
+    @attack_cooldown     = 0
+    @attack_cooldown_max = 0
   end
 
   # Increase efficiency on player level up
@@ -283,8 +291,8 @@ end
 # Flies in parabolic arc
 # Creates a zone of acid on ground, that enemies avoid
 class AcidFlask < Weapon
-  def initialize
-    @attack_cooldown     = Player_Acid_Attack_Cooldown_Curve.evaluate(1)
+  def initialize level
+    @attack_cooldown     = Player_Acid_Attack_Cooldown_Curve.evaluate(level)
     @attack_cooldown_max = @attack_cooldown
     @projectiles = []
     @side = 1
@@ -386,6 +394,26 @@ class AcidFlask < Weapon
       end
     end
     args.state.acid_pools.reject! {|pool| pool.is_finished?}
+  end
+end
+
+class ElectricAttack < Weapon
+  def initialize level
+    @attack_cooldown     = Player_Electric_Attack_Cooldown_Curve.evaluate(level)
+    @attack_cooldown_max = @attack_cooldown
+  end
+
+  # Increase efficiency on player level up
+  def level_up new_level
+    @attack_cooldown     = Player_Electric_Attack_Cooldown_Curve.evaluate(new_level)
+    @attack_cooldown_max = @attack_cooldown
+  end
+
+  def tick args
+    @attack_cooldown -= 1
+    if @attack_cooldown <= 0
+      args.state.player_attacks << EntityFactory::make_player_attack(25, 0, @player_side_on_start)
+    end
   end
 end
 
@@ -852,8 +880,12 @@ class State_Gameplay
     state.next_xp_level = player_get_next_xp_level state.player_level
 
     # Unlock weapons
-    if state.player_level == 2
-      state.player_weapons << AcidFlask.new
+    if state.player_level == ACID_WEAPON_UNLOCK_LEVEL
+      state.player_weapons << AcidFlask.new(state.player_level)
+    end
+
+    if state.player_level == ELECTRIC_WEAPON_UNLOCK_LEVEL
+      state.player_weapons << ElectricAttack.new(state.player_level)
     end
 
     # Improve weapons
@@ -1233,7 +1265,21 @@ class State_Gameover
     outputs.labels << { x: 640, y: 240.from_top,
       r: 255, g: 255, b: 49, size_enum: 3,
       alignment_enum: 1,
-      text: "Score #{args.state.score}"
+      text: "Level #{args.state.player_level}, Score #{args.state.score}"
+    }
+
+    args.outputs.sprites << {
+      x: 640,
+      y: 200,
+      w: PLAYER_SPRITE_WIDTH*2,
+      h: PLAYER_SPRITE_HEIGHT*2,
+      path: 'sprites/frank.png',
+      tile_x: 0,
+      tile_y: 0,
+      tile_w: PLAYER_SPRITE_WIDTH,
+      tile_h: PLAYER_SPRITE_HEIGHT,
+      anchor_x: 0.5, anchor_y: 0.5,
+      angle: 180
     }
 
     if @start_time.elapsed_time > 60
