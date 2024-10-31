@@ -3,7 +3,6 @@
 # Survive as long as you can
 #
 # TODO:
-# - Weapon 3: Lighting bolt on level 3 (goes in reverse through flowfield?)
 # - Splash screen with instructions
 # - Tease weapons on hud
 # - Test controller
@@ -11,6 +10,8 @@
 # - Curve adjust enemy count over time
 # - Give score from XP
 # - Add juice to xp collection (bettter UX)
+# - Sounds!
+# - Optimization
 
 require 'app/curves.rb'
 
@@ -720,7 +721,7 @@ class AcidPool < Effect
     @anchor_x = 0.5
     @anchor_y = 0.5
     @path = 'sprites/acid-cloud.png'
-    @a = 200
+    @a = 150
     @w = CELL_SIZE
     @h = CELL_SIZE
     @tile_x = 0
@@ -852,6 +853,16 @@ class State_TitleScreen
       y: 230,
       w: 400,
       h: 265
+    }
+
+    args.outputs.sprites << {
+      path: 'sprites/img-splash-help.png',
+      anchor_x: 1.0,
+      anchor_y: 0.5,
+      x: 0.from_right,
+      y: 230,
+      w: 385,
+      h: 341
     }
 
     if @start_time.elapsed_time > 30
