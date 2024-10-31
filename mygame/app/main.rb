@@ -4,12 +4,13 @@
 #
 # TODO:
 # - Game over sequence
-# - Weapon 3: Lighting bolt on level 3
+# - Weapon 3: Lighting bolt on level 3 (goes in reverse through flowfield?)
 # - Splash screen with instructions
 # - Game over screen
 # - Tease weapons on hud
 # - Test controller
 # - Mouse control?
+# - Health pickups are hard to see
 
 require 'app/curves.rb'
 
@@ -169,18 +170,22 @@ def tick args
   # Debug keys
   # Reset
   if Cheats::ENABLED
+    # Quick reset
     if args.inputs.keyboard.key_down.r
       $gtk.reset_next_tick
     end
 
+    # Level up
     if args.inputs.keyboard.key_down.l
       args.state.xp = args.state.next_xp_level
     end
 
+    # Show flow field
     if args.inputs.keyboard.key_down.p
       $debug_show_grid = !$debug_show_grid
     end
 
+    # Instakill
     if args.inputs.keyboard.key_down.o
       args.state.player.health = 0
     end
@@ -983,11 +988,24 @@ class State_Gameplay
     state.dead_enemies.reject! {|enemy| enemy.a <= 0 }
   end
   
+  MIN_X = 4
+  MAX_X = 1280-4
+  MIN_Y = 4
+  MAX_Y = 720-4
   def move_player
     if args.inputs.directional_angle
-      args.state.player.x += args.inputs.directional_angle.vector_x * PLAYER_MOVE_SPEED
-      args.state.player.y += args.inputs.directional_angle.vector_y * PLAYER_MOVE_SPEED
-      #enemy.tile_x = (current_idx % 2 == 0) ? 0 : ENEMY_SPRITE_WIDTH
+      args.outputs.debug << args.inputs.directional_angle.vector_x
+      future_x = state.player.x + args.inputs.directional_angle.vector_x * PLAYER_MOVE_SPEED
+      future_y = state.player.y + args.inputs.directional_angle.vector_y * PLAYER_MOVE_SPEED
+      # Clamp player to screen
+      if future_x > MIN_X and future_x < MAX_X
+        state.player.x = future_x
+      end
+      if future_y > MIN_Y && future_y < MAX_Y
+        state.player.y = future_y
+      end
+
+      # Two-frame player animation
       state.player.anim_time  ||= 0
       state.player.anim_frame ||= 0
       state.player.anim_time += 3
@@ -997,10 +1015,14 @@ class State_Gameplay
         state.player.tile_x = (state.player.anim_frame) == 0 ? 0 : PLAYER_SPRITE_WIDTH
       end
 
-      if args.inputs.directional_angle.vector_x.abs == 1
+      # Face left or right
+      if args.inputs.directional_angle.vector_x.abs > 0.5
         state.player.flip_horizontally = args.inputs.directional_angle.vector_x < 0
       end
     end
+    # Reset to screen if we somehow ended outside
+    state.player.x = state.player.x.greater(MIN_X).lesser(MAX_X)
+    state.player.y = state.player.y.greater(MIN_Y).lesser(MAX_Y)
   end
 
   def tick_player
