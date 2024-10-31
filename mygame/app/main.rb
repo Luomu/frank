@@ -10,8 +10,8 @@
 # - Test controller
 # - Mouse control?
 # - Curve adjust enemy count over time
-# - Show score in game over
 # - Give score from XP
+# - Add juice to xp collection (bettter UX)
 
 require 'app/curves.rb'
 
@@ -1231,9 +1231,14 @@ class State_Gameover
       alignment_enum: 1,
       text: "GAME OVER, YOU SURVIVED #{minutes}m #{seconds}s"
     }
+    outputs.labels << { x: 640, y: 240.from_top,
+      r: 255, g: 255, b: 49, size_enum: 3,
+      alignment_enum: 1,
+      text: "Score #{args.state.score}"
+    }
 
     if @start_time.elapsed_time > 60
-      outputs.labels << { x: 640, y: 240.from_top,
+      outputs.labels << { x: 640, y: 280.from_top,
         r: 255, g: 255, b: 49, size_enum: 1,
         alignment_enum: 1,
           text: "Press a key to continue"
