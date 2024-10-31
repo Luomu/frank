@@ -27,6 +27,7 @@ GRID_DIMENSION    = 32
 CELL_SIZE         = 40
 WORLD_SIZE        = GRID_DIMENSION * CELL_SIZE
 
+MAX_XP_PICKUPS       = 250
 MAX_ENEMIES          = 600
 ENEMY_RADIUS         = 18 # used for enemy-to-enemy collisions
 ENEMY_SPRITE_HEIGHT  = 42
@@ -249,11 +250,11 @@ class FrankFist < Weapon
     @sub_attack_cooldown_max = Player_Fist_Sub_Attack_Cooldown_Curve.evaluate(new_level)
 
     case new_level
-    when 1..2
+    when 1..3
       @num_sub_attacks = 1
-    when 3..4
+    when 4..6
       @num_sub_attacks = 2
-    when 5..6
+    when 6..8
       @num_sub_attacks = 3
     else
       @num_sub_attacks = 4
@@ -1008,7 +1009,7 @@ class State_Gameplay
 
   # Spawn XP drops
   def spawn_pickup enemy
-    while state.pickups.length > 400
+    while state.pickups.length > MAX_XP_PICKUPS
       state.pickups.shift
     end
     state.pickups << EntityFactory.make_xp_pickup(enemy.x,enemy.y)
