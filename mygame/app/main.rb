@@ -417,6 +417,49 @@ class ElectricAttack < Weapon
   end
 end
 
+# Attack sprites
+class FrankFist_PunchWave
+  attr_sprite
+
+  def initialize xoffs, yoffs, flip
+    @x = 0
+    @y = 0
+    @xoffs = flip ? -xoffs : xoffs
+    @yoffs = yoffs
+    @anchor_x = flip ? 0.8 : 0.2
+    @anchor_y = 0.5
+    @flip_horizontally = flip
+    @path = 'sprites/player-attacks.png'
+    @r = 255
+    @g = 255
+    @b = 255
+    @a = 255
+    @w = 30
+    @h = 50
+    @tile_w = 32
+    @tile_h = 64
+    @scale = 1.0
+    @life =  20
+  end
+
+  def finished?
+    @life <= 0
+  end
+
+  def tick args
+    @x = @xoffs + args.state.player.x
+    @y = @yoffs + args.state.player.y
+    @life -= 1
+    @w += 0.15
+    @h += 0.2
+  end
+
+  def on_collide_enemy enemy
+    @g = @b = 0
+    enemy.health -= 1
+  end
+end
+
 # Angry villager
 class Enemy
   attr_sprite
@@ -673,27 +716,7 @@ module EntityFactory
 
   # Punch wave (attached to the player)
   def self.make_player_attack xoffs, yoffs, flip
-    #xoffs = flip ? -25 : 25
-    {
-      x: 0,
-      y: 0,
-      xoffs: flip ? -xoffs : xoffs,
-      yoffs: yoffs,
-      anchor_x: flip ? 0.8 : 0.2,
-      anchor_y: 0.5,
-      flip_horizontally: flip,
-      path: 'sprites/player-attacks.png',
-      r: 255,
-      g: 255,
-      b: 255,
-      a: 255,
-      w: 30,
-      h: 50,
-      tile_w: 32,
-      tile_h: 64,
-      scale: 1.0,
-      life:  20,
-    }
+    FrankFist_PunchWave.new(xoffs, yoffs, flip)
   end
 
   def self.make_xp_pickup xpos, ypos
@@ -1118,21 +1141,15 @@ class State_Gameplay
     end
 
     # Update attack fx
-    # todo move inside fist weapon
     state.player_attacks.each do |attack|
-      attack.x = attack.xoffs + state.player.x
-      attack.y = attack.yoffs + state.player.y
-      attack.life -= 1
-      attack.w += 0.15
-      attack.h += 0.2
+      attack.tick args
     end
 
     Geometry.each_intersect_rect(state.player_attacks, state.enemies) do |attack, enemy|
-      attack.g = attack.b = 0
-      enemy.health -= 1
+      attack.on_collide_enemy enemy
     end
 
-    state.player_attacks.reject! {|attack| attack.life <= 0 }
+    state.player_attacks.reject! {|attack| attack.finished? }
 
     # Leveling up
     if state.next_xp_level > 0 && state.xp >= state.next_xp_level
