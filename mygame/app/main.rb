@@ -3,7 +3,6 @@
 # Survive as long as you can
 #
 # TODO:
-# - Game over sequence
 # - Weapon 3: Lighting bolt on level 3 (goes in reverse through flowfield?)
 # - Splash screen with instructions
 # - Game over screen
@@ -11,6 +10,8 @@
 # - Test controller
 # - Mouse control?
 # - Curve adjust enemy count over time
+# - Show score in game over
+# - Give score from XP
 
 require 'app/curves.rb'
 
@@ -472,7 +473,7 @@ class HealthPickup < Pickup
   def pick_up state
     super state
     state.player.health = state.player.health_max
-    state.fx << EntityFactory::make_fx_heal(state.player.x, state.player.y)
+    state.fx << EntityFactory::make_fx_heal(x, y)
     state.active_health_pickups -= 1
     grid_loc = state.world.world_to_coord @x, @y
     state.world.decrease_cost grid_loc.x, grid_loc.y, 1
@@ -592,6 +593,27 @@ class AcidPool < Effect
     # Presentation here
     frame_index = 0.frame_index 3, 20, true
     @tile_x = AcidFrames[frame_index]
+  end
+end
+
+# Animates player death
+class PlayerDeath < Effect
+  def initialize x,y,state
+    super x,y
+    @player = state.player
+    @life = 40
+    @a = 0
+  end
+
+  def tick
+    super
+    @player.h = (@player.h - 1).greater(2)
+    @player.w = (@player.w + 1.2).greater(2)
+    @player.y = (@player.y - 0.5)
+    @player.r = 255
+    @player.g = 0
+    @player.b = 0
+    @a = 255
   end
 end
 
@@ -758,7 +780,9 @@ class State_Gameplay
   def tick
     Sounds.fade_in_music args
 
-    args.state.seconds_survived = args.state.start_time.elapsed_time.idiv(60)
+    if player_alive?
+      args.state.seconds_survived = args.state.start_time.elapsed_time.idiv(60)
+    end
 
     plr_loc = state.world.world_to_coord state.player.x, state.player.y
     args.state.world.goal_location = plr_loc
@@ -771,7 +795,18 @@ class State_Gameplay
 
     # Game over check
     if args.state.player.health <= 0 && Cheats::GODMODE == false
-      args.state.current_state = State_Gameover.new args
+      # Start death anim
+      if !args.state.player_dying
+        args.state.player_dying = Kernel.tick_count
+        args.state.fx << PlayerDeath.new(state.player.x, state.player.y, args.state)
+        # Hack: stop weapons from firing, but otherwise keep logic running
+        state.player_weapons.each {|wpn| wpn.attack_cooldown = 100.seconds}
+      end
+
+      # Death anim over
+      if args.state.player_dying.elapsed_time > 140
+        args.state.current_state = State_Gameover.new args
+      end
     end
 
     args.outputs.background_color = [50,60,57] #blue-greenish
@@ -797,6 +832,10 @@ class State_Gameplay
     if state.player_weapons.length > 1
       outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
     end
+  end
+
+  def player_alive?
+    state.player.health > 0
   end
 
   def player_get_next_xp_level current_level
@@ -984,6 +1023,8 @@ class State_Gameplay
   end
 
   def tick_enemies
+    return unless player_alive?
+
     spawn_enemies
     collide_enemies
     move_enemies
@@ -998,6 +1039,8 @@ class State_Gameplay
   MIN_Y = 4
   MAX_Y = 720-4
   def move_player
+    return unless player_alive?
+
     if args.inputs.directional_angle
       args.outputs.debug << args.inputs.directional_angle.vector_x
       future_x = state.player.x + args.inputs.directional_angle.vector_x * PLAYER_MOVE_SPEED
@@ -1039,7 +1082,7 @@ class State_Gameplay
     end
 
     # Spawn health pickups when low
-    if state.player.health < 5 and state.active_health_pickups < 1
+    if player_alive? && state.player.health < 5 && state.active_health_pickups < 1
       spawn_health_pickup
     end
 
@@ -1067,6 +1110,7 @@ class State_Gameplay
   end
 
   def tick_pickups
+    return unless player_alive?
     collisions = Geometry.find_all_intersect_rect args.state.player, args.state.pickups
     collisions.each do |pickup|
       pickup.pick_up args.state
@@ -1097,11 +1141,13 @@ class State_Gameplay
     }
 
     # Health bar under the player
-    hp_bar_pos_x = state.player.x + 15
-    hp_bar_pos_y = state.player.y - 30
-    hp_bar_fill  = (state.player.health / state.player.health_max).clamp(0,1)
-    args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: 30, h: 5, anchor_x: 1.0, anchor_y: 1 }.solid!
-    args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: hp_bar_fill * 30, h: 5, r: 255, anchor_x: 1.0, anchor_y: 1 }.solid!
+    if player_alive?
+      hp_bar_pos_x = state.player.x + 15
+      hp_bar_pos_y = state.player.y - 30
+      hp_bar_fill  = (state.player.health / state.player.health_max).clamp(0,1)
+      args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: 30, h: 5, anchor_x: 1.0, anchor_y: 1 }.solid!
+      args.outputs.primitives << { x: hp_bar_pos_x, y: hp_bar_pos_y, w: hp_bar_fill * 30, h: 5, r: 255, anchor_x: 1.0, anchor_y: 1 }.solid!
+    end
 
     # Experience bar at the top of the screen
     xp        = state.xp
@@ -1111,8 +1157,8 @@ class State_Gameplay
     xp_bar_pos_y = 30.from_top
     xp_bar_fill  = (xp/xp_to_lvl).clamp(0,1)
     xp_bar_w     = 920
-    args.outputs.primitives << { x: xp_bar_pos_x-1, y: xp_bar_pos_y+1, w: xp_bar_w+2, h: 22, anchor_x: 0.0, anchor_y: 1 }.solid!
-    args.outputs.primitives << { x: xp_bar_pos_x, y: xp_bar_pos_y, w: xp_bar_w * xp_bar_fill, h: 20, b: 120, anchor_x: 0.0, anchor_y: 1 }.solid!
+    args.outputs.primitives << { x: xp_bar_pos_x-1, y: xp_bar_pos_y+1, w: xp_bar_w+2, h: 22, anchor_x: 0.0, anchor_y: 1, a: 170 }.solid!
+    args.outputs.primitives << { x: xp_bar_pos_x, y: xp_bar_pos_y, w: xp_bar_w * xp_bar_fill, h: 20, b: 120, anchor_x: 0.0, anchor_y: 1, a: 200 }.solid!
     args.outputs.labels << { x: 640, y: 34.from_top,
       r: 255, g: 255, b: 255, size_enum: -4,
       alignment_enum: 1,
@@ -1120,8 +1166,9 @@ class State_Gameplay
     }
   
     # Score (gold)
-    args.outputs.labels << { x: 100, y: 90.from_top,
-      r: 255, g: 255, b: 255, size_enum: -2,
+    args.outputs.labels << { x: 1090, y: 60.from_top,
+      r: 255, g: 255, b: 255, size_enum: -3,
+      alignment_enum: 2,
       text: "Score: #{args.state.score}"
     }
   end
