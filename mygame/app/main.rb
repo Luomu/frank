@@ -156,7 +156,7 @@ def tick args
   # Initialize/reinitialize
   if !args.state.initialized
     # Game logic runner
-    args.state.current_state = State_Gameplay.new args
+    args.state.current_state = State_TitleScreen.new args
     # Used to visualize lvl up curves
     #args.state.current_state = State_CurveTest.new args
     args.state.initialized = true
@@ -707,6 +707,16 @@ class State_TitleScreen
 
     args.outputs.background_color = [0,0,0]
     args.outputs.sprites << {
+      path: 'sprites/img-splash-title.png',
+      anchor_x: 0.5,
+      anchor_y: 1,
+      x: 640,
+      y: 120.from_top,
+      w: 1000,
+      h: 108
+    }
+
+    args.outputs.sprites << {
       path: 'sprites/img-splash-frank.png',
       anchor_x: 0.5,
       anchor_y: 0.5,
@@ -715,17 +725,6 @@ class State_TitleScreen
       w: 400,
       h: 265
     }
-
-    args.outputs.labels << {
-      anchor_x: 0.5,
-      x: 640,
-      y: 80.from_top,
-      size_enum: 4,
-      text: "Frankenstein Survivor",
-      r: 255,
-      g: 255,
-      b: 255
-    }    
 
     if @start_time.elapsed_time > 30
       args.outputs.labels << {
