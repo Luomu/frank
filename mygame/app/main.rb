@@ -66,7 +66,7 @@ Player_Acid_Attack_Cooldown_Curve = Curve.new(:linear,
 
 Player_Electric_Attack_Cooldown_Curve = Curve.new(:linear,
   [
-    [1,   60],
+    [1,   120],
     [100, 20]
   ]
 )
@@ -409,10 +409,17 @@ class ElectricAttack < Weapon
     @attack_cooldown_max = @attack_cooldown
   end
 
+  # Fires up and down
+  AttackOffset = [
+    [0, 50],
+    [0,-50],
+  ]
   def tick args
     @attack_cooldown -= 1
     if @attack_cooldown <= 0
-      args.state.player_attacks << EntityFactory::make_player_attack(25, 0, @player_side_on_start)
+      offs = AttackOffset.sample
+      args.state.player_attacks << EntityFactory::make_electric_attack(args.state.player.x + offs.x, args.state.player.y + offs.y, nil)
+      @attack_cooldown = @attack_cooldown_max
     end
   end
 end
@@ -457,6 +464,71 @@ class FrankFist_PunchWave
   def on_collide_enemy enemy
     @g = @b = 0
     enemy.health -= 1
+  end
+end
+
+class ElectricAttack_Bolt
+  attr_sprite
+
+  def initialize xpos, ypos, dir
+    @x = xpos
+    @y = ypos
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @path = 'sprites/attack-electric.png'
+    @r = 255
+    @g = 255
+    @b = 255
+    @a = 255
+    @w = 32
+    @h = 32
+    @tile_x = 0
+    @tile_y = 0
+    @tile_w = 32
+    @tile_h = 32
+    @scale = 1.0
+    @life =  200
+    @last_collision = Kernel.tick_count-30
+  end
+
+  def finished?
+    @life <= 0
+  end
+
+  AngleLookup = [
+    0, #N
+    -45,
+    90, #E
+    45,
+    180, #S
+    315,
+    270, #W
+    45
+  ]
+  def tick args
+    world = args.state.world
+    current_loc = world.world_to_coord @x, @y
+    if world.outside_world? current_loc
+      @life = 0
+    else
+      current_idx = world.coord_to_index current_loc.x, current_loc.y
+      world_dir   = world.vector_field[current_idx]
+      move_dir    = DirectionLookupNormalized[world_dir]
+      @angle      = AngleLookup[world_dir]
+      @x += -move_dir.x * 3
+      @y += -move_dir.y * 3
+    end
+    frame_index = 0.frame_index 3, 4, true
+    @tile_x = frame_index * 32    
+    @life -= 1
+  end
+
+  def on_collide_enemy enemy
+    if @life > 0 && @last_collision.elapsed_time > 5
+      @life -= 5
+      enemy.health -= 1
+      @last_collision = Kernel.tick_count
+    end
   end
 end
 
@@ -719,6 +791,10 @@ module EntityFactory
     FrankFist_PunchWave.new(xoffs, yoffs, flip)
   end
 
+  def self.make_electric_attack xpos, ypos, dir
+    ElectricAttack_Bolt.new(xpos, ypos, dir)
+  end
+
   def self.make_xp_pickup xpos, ypos
     ExperiencePickup.new(xpos, ypos)
   end
@@ -881,6 +957,9 @@ class State_Gameplay
     outputs.debug << "Attack 1 #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
     if state.player_weapons.length > 1
       outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
+    end
+    if state.player_weapons.length > 2
+      outputs.debug << "Attack 3 #{state.player_weapons[2].attack_cooldown_max.to_i}"
     end
   end
 
