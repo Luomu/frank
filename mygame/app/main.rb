@@ -10,7 +10,7 @@
 # - Tease weapons on hud
 # - Test controller
 # - Mouse control?
-# - Health pickups are hard to see
+# - Curve adjust enemy count over time
 
 require 'app/curves.rb'
 
@@ -185,9 +185,9 @@ def tick args
       $debug_show_grid = !$debug_show_grid
     end
 
-    # Instakill
+    # Self damage
     if args.inputs.keyboard.key_down.o
-      args.state.player.health = 0
+      args.state.player.health -= 5
     end
 
     #if args.inputs.keyboard.key_down.h
@@ -304,7 +304,7 @@ class AcidFlask < Weapon
   def put_acid_pool loc, args, world
     return if world.outside_world? loc
     # Mark location impassable (may already have an obstacle)
-    world.cost_field[world.coord_to_index(loc.x,loc.y)] += 2
+    world.increase_cost loc.x, loc.y, 2
 
     cell_center = world.coord_to_cell_center loc.x, loc.y
     acid_pool = EntityFactory::make_fx_acid_pool(cell_center.x, cell_center.y, loc)
@@ -381,7 +381,7 @@ class AcidFlask < Weapon
       pool.life -= 1
       if pool.is_finished?
         # Free up location
-        world.cost_field[world.coord_to_index(pool.location.x, pool.location.y)] -= 2
+        world.decrease_cost pool.location.x, pool.location.y, 2
       end
     end
     args.state.acid_pools.reject! {|pool| pool.is_finished?}
@@ -462,8 +462,11 @@ class ExperiencePickup < Pickup
 end
 
 class HealthPickup < Pickup
-  def initialize x,y
+  def initialize x,y,state
     super x,y,32
+
+    grid_loc = state.world.world_to_coord x, y
+    state.world.increase_cost grid_loc.x, grid_loc.y, 1
   end
 
   def pick_up state
@@ -471,6 +474,8 @@ class HealthPickup < Pickup
     state.player.health = state.player.health_max
     state.fx << EntityFactory::make_fx_heal(state.player.x, state.player.y)
     state.active_health_pickups -= 1
+    grid_loc = state.world.world_to_coord @x, @y
+    state.world.decrease_cost grid_loc.x, grid_loc.y, 1
   end
 end
 
@@ -645,8 +650,8 @@ module EntityFactory
     ExperiencePickup.new(xpos, ypos)
   end
 
-  def self.make_health_pickup xpos, ypos
-    HealthPickup.new(xpos, ypos)
+  def self.make_health_pickup xpos, ypos, state
+    HealthPickup.new(xpos, ypos, state)
   end
 
   def self.make_fx_level_up xpos, ypos
@@ -845,7 +850,7 @@ class State_Gameplay
       y: rand(10) + 4
     }
     coord = state.world.coord_to_cell_center cell.x, cell.y
-    state.pickups << EntityFactory.make_health_pickup(coord.x, coord.y)
+    state.pickups << EntityFactory.make_health_pickup(coord.x, coord.y, state)
     state.active_health_pickups += 1
   end
   
@@ -1236,6 +1241,22 @@ class WorldGrid
 
   def is_impassable? x,y
     @cost_field[coord_to_index(x,y)] > 0
+  end
+
+  def increase_cost x,y,cost
+    idx = coord_to_index(x,y)
+    if idx >= 0 && idx < @cost_field.length
+      @cost_field[coord_to_index(x,y)] += cost
+    end
+    set_dirty
+  end
+
+  def decrease_cost x,y,cost
+    idx = coord_to_index(x,y)
+    if idx >= 0 && idx < @cost_field.length
+      @cost_field[idx] = (@cost_field[idx] - cost).greater(0)
+    end
+    set_dirty
   end
 
   # Grid x,y location to array index
