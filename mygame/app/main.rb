@@ -165,7 +165,10 @@ class Sounds
   end
 
   def self.play_sfx_xp_pickup args
-    args.outputs.sounds << 'sounds/sfx-pickup-xp.wav'
+    args.outputs.sounds << {
+      path: 'sounds/sfx-pickup-xp.wav',
+      gain: 0.6
+    }
   end
 
   def self.play_sfx_xp_heal args
@@ -177,11 +180,17 @@ class Sounds
   end
 
   def self.play_sfx_wpn_flask args
-    args.outputs.sounds << 'sounds/sfx-flask.wav'
+    args.outputs.sounds << { 
+      path: 'sounds/sfx-flask.wav',
+      gain: 0.4
+    }
   end
 
   def self.play_sfx_wpn_elec args
-    args.outputs.sounds << 'sounds/sfx-electricity.wav'
+    args.outputs.sounds << {
+      path: 'sounds/sfx-electricity.wav',
+      gain: 0.4
+    }
   end
 
   def self.play_sfx_hurt_player args
@@ -190,7 +199,10 @@ class Sounds
 
   HurtSounds = [ 'sounds/sfx-hurt-enemy-2.wav', 'sounds/sfx-hurt-enemy.wav']
   def self.play_sfx_hurt_enemy args
-    args.outputs.sounds << HurtSounds.sample
+    args.outputs.sounds << {
+      path: HurtSounds.sample,
+      gain: 0.5
+    }
   end
 end
 
