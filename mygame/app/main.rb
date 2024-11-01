@@ -974,6 +974,7 @@ class State_Gameplay
     if args.state.player.health <= 0 && Cheats::GODMODE == false
       # Start death anim
       if !args.state.player_dying
+        Sounds.stop_music args
         Sounds.play_sfx_gameover args
         args.state.player_dying = Kernel.tick_count
         args.state.fx << PlayerDeath.new(state.player.x, state.player.y, args.state)
