@@ -959,6 +959,9 @@ class State_Gameplay
     end
 
     plr_loc = state.world.world_to_coord state.player.x, state.player.y
+    if args.state.world.goal_location != plr_loc
+      args.state.world.set_dirty
+    end
     args.state.world.goal_location = plr_loc
     args.state.world.tick
 
@@ -1515,6 +1518,8 @@ class WorldGrid
 
     # Walls
     @cost_field = Array.new(@width * @height, 0)
+
+    @dirty = true
   end
 
   def set_impassable x,y
@@ -1660,11 +1665,9 @@ class WorldGrid
   end
 
   def tick
-    # Todo add dirty flag
-    #return if (@prev_location == @goal_location)
-    @prev_location == @goal_location
-    # Todo: Don't calculate this, if the position is the same
-    # Split the calculation over multiple frames to reduce the load
+    return unless @dirty
+    # Todo: Split the calculation over multiple frames to reduce the load
+
     @distance_field.fill(-1)
 
     # Calculate distances
