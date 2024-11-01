@@ -35,7 +35,7 @@ PLAYER_COLLIDE_RADIUS_SQ = 35 * 35
 
 # Weapon balancing data
 ACID_WEAPON_UNLOCK_LEVEL     = 2
-ELECTRIC_WEAPON_UNLOCK_LEVEL = 5
+ELECTRIC_WEAPON_UNLOCK_LEVEL = 4
 ACID_POOL_LIFETIME = 20.seconds
 
 # Fist attack cooldown, in ticks
@@ -1772,8 +1772,6 @@ class State_CurveTest
       ]
     end
 
-    #Rendering.set_color COLOR_LAVENDER_P8
-    #Rendering.rectangle(x_offs-2,y_offs-2,Size+4,Size+4)
     render_line_strip(pts, color)
   end
 
