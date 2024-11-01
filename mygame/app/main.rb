@@ -180,6 +180,10 @@ class Sounds
     args.outputs.sounds << 'sounds/sfx-flask.wav'
   end
 
+  def self.play_sfx_wpn_elec args
+    args.outputs.sounds << 'sounds/sfx-electricity.wav'
+  end
+
   def self.play_sfx_hurt_player args
     args.outputs.sounds << 'sounds/sfx-hurt-player.wav'
   end
@@ -452,6 +456,7 @@ class ElectricAttack < Weapon
       offs = AttackOffset.sample
       args.state.player_attacks << EntityFactory::make_electric_attack(args.state.player.x + offs.x, args.state.player.y + offs.y, nil)
       @attack_cooldown = @attack_cooldown_max
+      Sounds.play_sfx_wpn_elec args
     end
   end
 end
