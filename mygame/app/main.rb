@@ -3,14 +3,10 @@
 # Survive as long as you can
 #
 # TODO:
-# - Splash screen with instructions
-# - Tease weapons on hud
-# - Test controller
 # - Mouse control?
 # - Curve adjust enemy count over time
 # - Give score from XP
 # - Add juice to xp collection (bettter UX)
-# - Sounds!
 # - Optimization
 
 require 'app/curves.rb'
@@ -159,6 +155,38 @@ class Sounds
       args.audio[:track_1].gain += 0.001
     end
   end
+
+  def self.play_sfx_gameover args
+    args.audio[:track_2] = {
+      input: "sounds/music-gameover.ogg",
+      looping: false
+    }
+  end
+
+  def self.play_sfx_xp_pickup args
+    args.outputs.sounds << 'sounds/sfx-pickup-xp.wav'
+  end
+
+  def self.play_sfx_xp_heal args
+    args.outputs.sounds << 'sounds/sfx-pickup-heal.wav'
+  end
+
+  def self.play_sfx_level_up args
+    args.outputs.sounds << 'sounds/sfx-levelup.wav'
+  end
+
+  def self.play_sfx_wpn_flask args
+    args.outputs.sounds << 'sounds/sfx-flask.wav'
+  end
+
+  def self.play_sfx_hurt_player args
+    args.outputs.sounds << 'sounds/sfx-hurt-player.wav'
+  end
+
+  HurtSounds = [ 'sounds/sfx-hurt-enemy-2.wav', 'sounds/sfx-hurt-enemy.wav']
+  def self.play_sfx_hurt_enemy args
+    args.outputs.sounds << HurtSounds.sample
+  end
 end
 
 # Main loop
@@ -195,12 +223,6 @@ def tick args
     if args.inputs.keyboard.key_down.p
       $debug_show_grid = !$debug_show_grid
     end
-
-    # Self damage
-    if args.inputs.keyboard.key_down.o
-      args.state.player.health -= 5
-    end
-
     #if args.inputs.keyboard.key_down.h
     #  1000.times {
     #    args.state.current_state.spawn_health_pickup
@@ -324,6 +346,8 @@ class AcidFlask < Weapon
 
   # Create an interesting shape to block enemies
   def explode flask, args, world
+    Sounds.play_sfx_wpn_flask args
+
     flask_loc = world.world_to_coord flask.x, flask.y
 
     # Spawn acid pool/cloud/whatever
@@ -465,7 +489,7 @@ class FrankFist_PunchWave
 
   def on_collide_enemy enemy
     @g = @b = 0
-    enemy.health -= 1
+    enemy.apply_damage 2
   end
 end
 
@@ -528,7 +552,7 @@ class ElectricAttack_Bolt
   def on_collide_enemy enemy
     if @life > 0 && @last_collision.elapsed_time > 5
       @life -= 5
-      enemy.health -= 1
+      enemy.apply_damage 1
       @last_collision = Kernel.tick_count
     end
   end
@@ -560,10 +584,18 @@ class Enemy
     @flip_horizontally = flip
     @health = 2
     @a = 255
+    @last_damaged = Kernel.tick_count
+  end
 
+  def apply_damage amount
+    if @health > 0 && @last_damaged != Kernel.tick_count
+      @health -= amount
+      @last_damaged = Kernel.tick_count
+    end
   end
 
   def start_death
+    Sounds.play_sfx_hurt_enemy $args
     @r = 255
     @g = 0
     @b = 0
@@ -591,7 +623,7 @@ class Pickup
     @activated = false
   end
 
-  def pick_up state
+  def pick_up args
     @activated = true
   end
 end
@@ -601,9 +633,10 @@ class ExperiencePickup < Pickup
     super x,y,0
   end
 
-  def pick_up state
-    super state
-    state.xp += XP_PICKUP_VALUE
+  def pick_up args
+    super args
+    args.state.xp += XP_PICKUP_VALUE
+    Sounds.play_sfx_xp_pickup args
   end
 end
 
@@ -615,13 +648,15 @@ class HealthPickup < Pickup
     state.world.increase_cost grid_loc.x, grid_loc.y, 1
   end
 
-  def pick_up state
-    super state
+  def pick_up args
+    super args
+    state = args.state
     state.player.health = state.player.health_max
     state.fx << EntityFactory::make_fx_heal(x, y)
     state.active_health_pickups -= 1
     grid_loc = state.world.world_to_coord @x, @y
     state.world.decrease_cost grid_loc.x, grid_loc.y, 1
+    Sounds.play_sfx_xp_heal args
   end
 end
 
@@ -777,6 +812,7 @@ module EntityFactory
       anchor_x: 0.5, anchor_y: 0.5,
       health:     PLAYER_HEALTH,
       health_max: PLAYER_HEALTH,
+      last_damaged: Kernel.tick_count
     }
   end
 
@@ -935,6 +971,7 @@ class State_Gameplay
     if args.state.player.health <= 0 && Cheats::GODMODE == false
       # Start death anim
       if !args.state.player_dying
+        Sounds.play_sfx_gameover args
         args.state.player_dying = Kernel.tick_count
         args.state.fx << PlayerDeath.new(state.player.x, state.player.y, args.state)
         # Hack: stop weapons from firing, but otherwise keep logic running
@@ -973,10 +1010,25 @@ class State_Gameplay
     if state.player_weapons.length > 2
       outputs.debug << "Attack 3 #{state.player_weapons[2].attack_cooldown_max.to_i}"
     end
+
+    # Debug keys
+    if Cheats::ENABLED
+      if args.inputs.keyboard.key_down.o
+        player_apply_damage 5
+      end
+    end
   end
 
   def player_alive?
     state.player.health > 0
+  end
+
+  def player_apply_damage amount
+    if player_alive? and state.player.last_damaged.elapsed_time > 5
+      state.player.last_damaged = Kernel.tick_count
+      state.player.health = (state.player.health - amount).greater(0)
+      Sounds.play_sfx_hurt_player args
+    end
   end
 
   def player_get_next_xp_level current_level
@@ -1007,6 +1059,8 @@ class State_Gameplay
 
     # Level up fx
     state.fx << EntityFactory::make_fx_level_up(state.player.x, state.player.y + 60)
+
+    Sounds.play_sfx_level_up args
   end
 
   def spawn_enemies
@@ -1046,8 +1100,8 @@ class State_Gameplay
     # Collide against player
     collisions = state.enemies.find_all { |b| b.intersect_rect? player_hitbox }
     collisions.each do |enemy|
-      enemy.health -= 1
-      state.player.health -= 1
+      enemy.apply_damage 1
+      player_apply_damage 3
     end
 
     # Remove deads (put into a dead list while their death anim plays)
@@ -1103,7 +1157,8 @@ class State_Gameplay
         deflect_enemy_from_point enemy, cell_center, dt
         # Damage from damage zones (shouldn't do here but running out of time :)
         if state.world.cost_field[current_idx] > 1
-          enemy.health -= 1
+          #enemy.apply_damage 1
+          enemy.health -= 1 # no dmg sound
         end
       # Check if the enemy should steer directly towards the player (at 0 distance, or outside play area)
       elsif state.world.outside_world? current_loc
@@ -1252,7 +1307,7 @@ class State_Gameplay
     return unless player_alive?
     collisions = Geometry.find_all_intersect_rect args.state.player, args.state.pickups
     collisions.each do |pickup|
-      pickup.pick_up args.state
+      pickup.pick_up args
     end
 
     # Collide pickups
