@@ -357,10 +357,15 @@ class AcidFlask < Weapon
     world.set_dirty
   end
 
-  def get_random_cell
+  def get_random_cell_near_player args
+    plr_loc = args.state.world.goal_location
+    min_x = (plr_loc.x - 6).greater(1)
+    max_x = (plr_loc.x + 6).lesser(31)
+    min_y = (plr_loc.y - 6).greater(1)
+    max_y = (plr_loc.y + 6).lesser(17)
     {
-      x: rand(30) + 1,
-      y: rand(16) + 1
+      x: rand(max_x - min_x) + min_x,
+      y: rand(max_y - min_y) + min_y
     }
   end
 
@@ -368,7 +373,7 @@ class AcidFlask < Weapon
     @attack_cooldown -= 1
     if @attack_cooldown <= 0
       # Spawn ye flask that flies in a curved arc
-      target_cell = get_random_cell
+      target_cell = get_random_cell_near_player args
       target_loc  = args.state.world.coord_to_cell_center target_cell.x, target_cell.y
       start_x = args.state.player.x
       @side   = @side > 0 ? -1 : 1
