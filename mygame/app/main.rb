@@ -1004,16 +1004,16 @@ class State_Gameplay
     render_hud
 
     # Debug watches
-    outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
-    outputs.debug << "HP #{state.player.health.to_i}"
-    outputs.debug << "Pickups #{state.pickups.length.to_i}"
-    outputs.debug << "Attack 1 #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
-    if state.player_weapons.length > 1
-      outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
-    end
-    if state.player_weapons.length > 2
-      outputs.debug << "Attack 3 #{state.player_weapons[2].attack_cooldown_max.to_i}"
-    end
+    #outputs.debug << "Enemies #{args.state.enemies.length.to_i}"
+    #outputs.debug << "HP #{state.player.health.to_i}"
+    #outputs.debug << "Pickups #{state.pickups.length.to_i}"
+    #outputs.debug << "Attack 1 #{state.player_weapons[0].attack_cooldown_max.to_i} #{state.player_weapons[0].sub_attack_cooldown_max.to_i}"
+    #if state.player_weapons.length > 1
+    #  outputs.debug << "Attack 2 #{state.player_weapons[1].attack_cooldown_max.to_i}"
+    #end
+    #if state.player_weapons.length > 2
+    #  outputs.debug << "Attack 3 #{state.player_weapons[2].attack_cooldown_max.to_i}"
+    #end
 
     # Debug keys
     if Cheats::ENABLED
@@ -1521,6 +1521,7 @@ class WorldGrid
     @cost_field = Array.new(@width * @height, 0)
 
     @dirty = true
+    @calculation_stage = 0
   end
 
   def set_impassable x,y
@@ -1665,10 +1666,22 @@ class WorldGrid
     @dirty = true
   end
 
-  def tick
-    return unless @dirty
-    # Todo: Split the calculation over multiple frames to reduce the load
+  # Data for looping through neighbors in the following calculation
+  # xoffset, yoffset and which direction they correspond to
+  DirCheckData = [
+    [0, 1, North],
+    [1, 0, East],
+    [0, -1, South],
+    [-1, 0, West],
 
+    [1, 1,   NorthEast],
+    [1, -1,  SouthEast],
+    [-1, -1, SouthWest],
+    [-1, 1,  NorthWest],
+  ]
+
+  def calculate_distance_field
+    return unless @calculation_stage == 0
     @distance_field.fill(-1)
 
     # Calculate distances
@@ -1688,20 +1701,11 @@ class WorldGrid
       end
     end
 
-    # Data for looping through neighbors in the following calculation
-    # xoffset, yoffset and which direction they correspond to
-    DirCheckData = [
-      [0, 1, North],
-      [1, 0, East],
-      [0, -1, South],
-      [-1, 0, West],
+    @calculation_stage = 1
+  end
 
-      [1, 1,   NorthEast],
-      [1, -1,  SouthEast],
-      [-1, -1, SouthWest],
-      [-1, 1,  NorthWest],
-    ]
-
+  def calculate_vector_field
+    return unless @calculation_stage == 1
     # Calculate the optimal direction from each cell
     # Look around the neighboring cells and check which has the lowest distance
     # We check all 8 neighbors here to allow diagonal movement
@@ -1720,6 +1724,19 @@ class WorldGrid
 
       @vector_field[idx] = best_direction
     end
+    @calculation_stage = 0
+    @dirty = false
+  end
+
+  def tick
+    return unless @dirty
+
+    calculate_distance_field
+    if @calculation_stage == 0
+      @calculation_stage = 1
+      return
+    end
+    calculate_vector_field
   end
 end
 
