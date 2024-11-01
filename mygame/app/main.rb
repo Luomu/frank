@@ -151,6 +151,7 @@ class Sounds
   end
 
   def self.fade_in_music args
+    return unless args.audio[:track_1]
     if args.audio[:track_1].gain < 1.0
       args.audio[:track_1].gain += 0.001
     end
