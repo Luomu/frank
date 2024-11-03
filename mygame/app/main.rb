@@ -449,6 +449,7 @@ class ElectricAttack < Weapon
   def initialize level
     @attack_cooldown     = Player_Electric_Attack_Cooldown_Curve.evaluate(level)
     @attack_cooldown_max = @attack_cooldown
+    @attack_sequence = 0
   end
 
   # Increase efficiency on player level up
@@ -465,7 +466,8 @@ class ElectricAttack < Weapon
   def tick args
     @attack_cooldown -= 1
     if @attack_cooldown <= 0
-      offs = AttackOffset.sample
+      @attack_sequence = (@attack_sequence + 1).mod(2)
+      offs = AttackOffset[@attack_sequence]
       args.state.player_attacks << EntityFactory::make_electric_attack(args.state.player.x + offs.x, args.state.player.y + offs.y, nil)
       @attack_cooldown = @attack_cooldown_max
       Sounds.play_sfx_wpn_elec args
