@@ -434,7 +434,7 @@ class AcidFlask < Weapon
 
     # Update acid pools
     args.state.acid_pools.each do |pool|
-      pool.tick
+      pool.tick args
       pool.life -= 1
       if pool.is_finished?
         # Free up location
@@ -687,9 +687,12 @@ end
 class HealthPickup < Pickup
   def initialize x,y,state
     super x,y,32
-
     grid_loc = state.world.world_to_coord x, y
     state.world.increase_cost grid_loc.x, grid_loc.y, 1
+
+    # glow
+    @glow_effect = GlowEffect.new(x,y)
+    state.fx << @glow_effect
   end
 
   def pick_up args
@@ -701,6 +704,7 @@ class HealthPickup < Pickup
     grid_loc = state.world.world_to_coord @x, @y
     state.world.decrease_cost grid_loc.x, grid_loc.y, 1
     Sounds.play_sfx_xp_heal args
+    @glow_effect.life = -1
   end
 end
 
@@ -713,7 +717,7 @@ class Effect
     @y    = y
   end
 
-  def tick
+  def tick args
     @life -= 1
   end
 
@@ -735,7 +739,7 @@ class LevelUpEffect < Effect
     @h = 33
   end
 
-  def tick
+  def tick args
     super
     @a = (@a - 10).greater(0)
     @y += 1
@@ -759,11 +763,45 @@ class HealEffect < Effect
     @tile_h = 32
   end
 
-  def tick
+  def tick args
     super
     @a = (@a - 5).greater(0)
     @w += 2
     @h += 2
+  end
+end
+
+# Animated halo around an important pickup
+class GlowEffect < Effect
+  def initialize x,y
+    super x,y
+    @life     = 100
+    @anchor_x = 0.5
+    @anchor_y = 0.5
+    @a = 255
+    @w = 64
+    @h = 64
+    @path   = 'sprites/fx-glow.png'
+    @blendmode_enum = 2
+    @glow_time = Kernel.tick_count
+  end
+
+  Spline = [
+    [  0, 0.25, 0.75, 1.0],
+    [1.0, 0.75, 0.25,   0]
+  ]
+  def tick args
+    # Animate transparency and width/height
+    progress = args.easing.ease_spline @glow_time,
+      Kernel.tick_count,
+      130,
+      Spline
+    @a = 10 + 100 * progress
+    @w = 20 + 80 * progress
+    @h = 20 + 80 * progress
+    if @glow_time.elapsed_time > 130
+      @glow_time = Kernel.tick_count
+    end
   end
 end
 
@@ -785,7 +823,7 @@ class AcidFlaskProjectile < Effect
     @curve  = nil # set by AcidFlask
   end
 
-  def tick
+  def tick args
     # Managed by the weapon class
   end
 end # AcidFlaskProjectile
@@ -812,7 +850,7 @@ class AcidPool < Effect
   end
 
   AcidFrames = [0, 32, 64]
-  def tick
+  def tick args
     # Again, we let the weapon control the lifetime of this item (keeps logic in one place)
     # Presentation here
     frame_index = 0.frame_index 3, 20, true
@@ -829,7 +867,7 @@ class PlayerDeath < Effect
     @a = 0
   end
 
-  def tick
+  def tick args
     super
     @player.h = (@player.h - 1).greater(2)
     @player.w = (@player.w + 1.2).greater(2)
@@ -1367,7 +1405,7 @@ class State_Gameplay
 
   def tick_fx
     state.fx.each do |effect|
-      effect.tick
+      effect.tick args
     end
 
     state.fx.reject! {|effect| effect.is_finished?}
