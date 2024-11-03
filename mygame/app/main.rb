@@ -646,6 +646,10 @@ class Pickup
     @activated = false
   end
 
+  def finished? args
+    @activated
+  end
+
   def pick_up args
     @activated = true
   end
@@ -657,9 +661,26 @@ class ExperiencePickup < Pickup
   end
 
   def pick_up args
+    return if @activated
     super args
-    args.state.xp += XP_PICKUP_VALUE
-    Sounds.play_sfx_xp_pickup args
+    @pickup_time = Kernel.tick_count
+    @start_x     = @x
+    @start_y     = @y
+  end
+
+  def finished? args
+    # Animate towards player, then award the XP
+    if @activated
+      t = @pickup_time.ease(25, :cube)
+      @x = lerp(@start_x, args.state.player.x, t)
+      @y = lerp(@start_y, args.state.player.y, t)
+      if t >= 1.0
+        @pickup_finished = true
+        args.state.xp += XP_PICKUP_VALUE
+        Sounds.play_sfx_xp_pickup args
+      end
+    end
+    return @pickup_finished
   end
 end
 
@@ -1332,15 +1353,16 @@ class State_Gameplay
 
   def tick_pickups
     return unless player_alive?
+
+    # Collide pickups
     collisions = Geometry.find_all_intersect_rect args.state.player, args.state.pickups
     collisions.each do |pickup|
       pickup.pick_up args
     end
 
-    # Collide pickups
     # Animate pickups upon collect
     # Reject removed pickups
-    state.pickups.reject! {|pickup| pickup.activated }
+    state.pickups.reject! {|pickup| pickup.finished? args }
   end
 
   def tick_fx
